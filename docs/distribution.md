@@ -2,13 +2,12 @@
 
 For a local build and first start, use the [installation guide](installation.md).
 This reference covers GitHub Releases, Homebrew, APT and GHCR, including
-maintainer setup. The public installation
-commands require a published release in the selected channel. Build a local checkout with
+maintainer setup. You can also build a local checkout with
 `go build -o clivoy ./cmd/clivoy` (use `clivoy.exe` on Windows).
 
 ## Supported packages
 
-| Channel | Platforms | Installation after publication |
+| Channel | Platforms | Installation |
 | --- | --- | --- |
 | GitHub Releases | Windows, macOS, Linux; amd64 and arm64 | Download a ZIP (Windows) or tar.gz and verify `checksums.txt` |
 | Homebrew tap | macOS and Linux; amd64 and arm64 | `brew install wklee610/clivoy/clivoy` |
@@ -62,8 +61,8 @@ to generate a formula with `file://` archive URLs and register a private local t
 
 ## APT
 
-After the first APT publication, install the public signing key. First install
-the download prerequisites from your distribution's existing repositories:
+Install the download prerequisites from your distribution's existing repositories,
+then download the Clivoy public signing key:
 
 ```sh
 sudo apt-get update
@@ -73,16 +72,23 @@ curl -fsSLo /tmp/clivoy-archive-keyring.gpg \
 gpg --show-keys --with-fingerprint /tmp/clivoy-archive-keyring.gpg
 ```
 
-Compare the displayed fingerprint with the fingerprint the maintainer publishes
-in the release announcement, then install the key and source:
+The signing-key fingerprint is **`2731106AE613E8E58552C2D26C9D05834AB8E2D9`**,
+also included in the release announcement. The next block checks that fingerprint
+and stops before installation if it does not match, then adds the signed repository:
 
 ```sh
-sudo install -d -m 0755 /etc/apt/keyrings
-sudo install -m 0644 /tmp/clivoy-archive-keyring.gpg /etc/apt/keyrings/clivoy.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/clivoy.gpg] https://wklee610.github.io/clivoy/apt stable main" \
-  | sudo tee /etc/apt/sources.list.d/clivoy.list >/dev/null
-sudo apt-get update
-sudo apt-get install clivoy
+(
+  set -eu
+  CLIVOY_APT_FINGERPRINT="$(gpg --batch --show-keys --with-colons /tmp/clivoy-archive-keyring.gpg \
+    | awk -F: '$1 == "pub" { primary=1 } $1 == "fpr" && primary { print $10; primary=0 }')"
+  test "$CLIVOY_APT_FINGERPRINT" = "2731106AE613E8E58552C2D26C9D05834AB8E2D9"
+  sudo install -d -m 0755 /etc/apt/keyrings
+  sudo install -m 0644 /tmp/clivoy-archive-keyring.gpg /etc/apt/keyrings/clivoy.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/clivoy.gpg] https://wklee610.github.io/clivoy/apt stable main" \
+    | sudo tee /etc/apt/sources.list.d/clivoy.list >/dev/null
+  sudo apt-get update
+  sudo apt-get install clivoy
+)
 ```
 
 APT verifies the signed `InRelease` and the index/package hashes. The key is
@@ -137,7 +143,7 @@ the container refers to the container. Use a reachable service hostname for
 upstreams; Docker Desktop supports `host.docker.internal`, while Linux Docker
 may need `--add-host=host.docker.internal:host-gateway`.
 
-Prefer a release tag such as `ghcr.io/wklee610/clivoy:v0.1.0`, or an image
+Prefer a release tag such as `ghcr.io/wklee610/clivoy:v1.0.0`, or an image
 digest, when reproducibility matters. `latest` is updated by each stable
 release. GHCR packages must be public to allow anonymous pulls.
 
@@ -166,7 +172,7 @@ release. GHCR packages must be public to allow anonymous pulls.
 5. Ensure CI is green and the intended commit is on the release branch.
    Protect release tags from untrusted writers: tagged code executes with
    publishing credentials. Then create and push a stable tag such as
-   `v0.1.0` when ready to publish.
+   `v1.0.0` when ready to publish.
 
 Only stable `vMAJOR.MINOR.PATCH` tags publish. The release workflow calls the
 complete CI workflow before it can publish, checks required configuration,

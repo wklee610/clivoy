@@ -137,9 +137,19 @@ func TestRollbackPreservesReplacement(t *testing.T) {
 	if err := os.WriteFile(path, []byte("created"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(path)
+	file, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Match initConfig's handle-based identity capture. On Windows os.Stat
+	// defers loading the file ID until SameFile, after this path is replaced.
+	info, statErr := file.Stat()
+	closeErr := file.Close()
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	if err := os.Rename(path, path+".old"); err != nil {
 		t.Fatal(err)

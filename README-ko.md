@@ -18,15 +18,18 @@ Clivoy 실행에는 GPU나 Python이 필요 없습니다. macOS, Linux, Windows�
 
 ## Installation Guide
 
-**Go 1.25 이상**을 설치한 뒤, 이 저장소의 소스 폴더에서 빌드합니다.
+**macOS·Linux — Homebrew:**
 
 ```sh
-go build -o clivoy ./cmd/clivoy
+brew install wklee610/clivoy/clivoy
 ```
 
-Windows에서는 `go build -o clivoy.exe ./cmd/clivoy`로 빌드하고,
-아래의 `./clivoy`를 `.\clivoy.exe`로 바꾸면 됩니다.
-실행 파일이 `PATH`에 있으면 `clivoy`로 실행할 수 있습니다.
+**Debian·Ubuntu:** [APT 저장소를 설정](docs/installation.md#apt-debian-and-ubuntu)한 뒤
+`sudo apt-get install clivoy`로 설치합니다.
+Windows는 [릴리스 파일](https://github.com/wklee610/clivoy/releases/latest)을 받으세요.
+Go 1.25 이상으로 [소스에서 직접 빌드](docs/installation.md#build-from-source)할 수도 있습니다.
+아래 명령은 실행 파일이 `PATH`에 있다고 가정합니다. 소스에서 빌드했다면
+`clivoy` 대신 `./clivoy` 또는 `.\clivoy.exe`를 사용하세요.
 
 **사용할 제공자만** 준비하세요.
 
@@ -40,15 +43,13 @@ Windows에서는 `go build -o clivoy.exe ./cmd/clivoy`로 빌드하고,
 | vLLM, LiteLLM | OpenAI 호환 HTTP 서버 | [HTTP 설정](docs/providers.md#other-model-servers) |
 
 Windows 사용법, CLI 경로 확인, 패키지 설치는 [설치 가이드](docs/installation.md)에 있습니다.
-Homebrew, APT, 릴리스 다운로드, 컨테이너 설치는 각 채널에 배포된 이후 사용할 수
-있습니다. 위 소스 빌드는 배포 여부와 관계없이 사용할 수 있습니다.
 
 ## Quickstart
 
 **1. 서버를 시작합니다.**
 
 ```sh
-./clivoy start
+clivoy start
 ```
 
 처음 실행하면 설정 파일과 로컬 API 키를 자동으로 만들고 `0.0.0.0:9610`에서
@@ -58,10 +59,10 @@ Homebrew, APT, 릴리스 다운로드, 컨테이너 설치는 각 채널에 배�
 **2. 클라이언트에서 사용할 키를 불러옵니다.**
 
 ```sh
-export CLIVOY_API_KEY="$(./clivoy auth)"
+export CLIVOY_API_KEY="$(clivoy auth)"
 ```
 
-PowerShell: `$env:CLIVOY_API_KEY = .\clivoy.exe auth`.
+PowerShell: `$env:CLIVOY_API_KEY = clivoy auth`.
 이 키는 내 Clivoy 서버에 접속하기 위한 키입니다. 제공자의 로그인이나 API 키와는 별개입니다.
 `auth`는 첫 키만 출력하고, `keygen`은 생성만 합니다. [추가 키 등록 방법](docs/usage.md#what-is-clivoy_api_key).
 
@@ -85,7 +86,7 @@ xAI API에 직접 연결하려면 [Grok API 설정](docs/providers.md#grok-xai-a
 `ollama pull llama3.2:3b`로 모델을 받고, 요청에 `model: "ollama/llama3.2:3b"`를 넣으세요.
 이미 설치한 다른 모델 이름으로 바꿔도 됩니다.
 
-[간단한 Python 예제](docs/usage.md#python-connectivity-test)는 `python3 scripts/test_clivoy.py`로 실행합니다.
+소스 폴더나 릴리스 압축을 푼 폴더에서 [간단한 Python 예제](docs/usage.md#python-connectivity-test)를 `python3 scripts/test_clivoy.py`로 실행합니다.
 안내에 따라 `openai`를 설치하고 파일 안의 모델 이름을 바꾸면 됩니다.
 
 ## SDK에서 사용하기

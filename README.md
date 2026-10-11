@@ -18,14 +18,18 @@ macOS, Linux and Windows.
 
 ## Installation Guide
 
-From a checkout of this repository, with **Go 1.25 or later** installed:
+**macOS and Linux — Homebrew:**
 
 ```sh
-go build -o clivoy ./cmd/clivoy
+brew install wklee610/clivoy/clivoy
 ```
 
-On Windows, use `go build -o clivoy.exe ./cmd/clivoy` and replace `./clivoy`
-below with `.\clivoy.exe`. If the executable is on your `PATH`, use `clivoy`.
+**Debian and Ubuntu:** [set up the APT repository](docs/installation.md#apt-debian-and-ubuntu),
+then run `sudo apt-get install clivoy`.
+For Windows, download a [release archive](https://github.com/wklee610/clivoy/releases/latest).
+Alternatively, [build from source](docs/installation.md#build-from-source) with Go 1.25 or later.
+Commands below assume `clivoy` is on `PATH`; for a local build, use `./clivoy`
+or `.\clivoy.exe` instead.
 
 Set up **only the provider you want to use**:
 
@@ -39,16 +43,14 @@ Set up **only the provider you want to use**:
 | vLLM, LiteLLM | OpenAI-compatible HTTP server | [HTTP setup](docs/providers.md#other-model-servers) |
 
 See the [full installation guide](docs/installation.md) for Windows steps,
-CLI detection and package options. Homebrew, APT, release downloads and container
-commands require publication to their respective channels; building this checkout
-works independently of those releases.
+CLI detection and other package options.
 
 ## Quickstart
 
 **1. Start Clivoy.**
 
 ```sh
-./clivoy start
+clivoy start
 ```
 
 The first start creates your configuration and local API key automatically,
@@ -58,10 +60,10 @@ then listens on `0.0.0.0:9610` in the background. Connect locally at
 **2. Load your gateway key.**
 
 ```sh
-export CLIVOY_API_KEY="$(./clivoy auth)"
+export CLIVOY_API_KEY="$(clivoy auth)"
 ```
 
-PowerShell: `$env:CLIVOY_API_KEY = .\clivoy.exe auth`.
+PowerShell: `$env:CLIVOY_API_KEY = clivoy auth`.
 This key belongs to your local Clivoy server; it is separate from provider logins
 and upstream API keys.
 `auth` prints the first active key; `keygen` only generates one. [Register extra keys](docs/usage.md#what-is-clivoy_api_key).
@@ -86,7 +88,7 @@ For a direct xAI API connection, use the optional [Grok API setup](docs/provider
 `ollama pull llama3.2:3b`, then use `model: "ollama/llama3.2:3b"` in the request.
 You can substitute another model already installed in Ollama.
 
-Try the [short Python example](docs/usage.md#python-connectivity-test): `python3 scripts/test_clivoy.py`.
+From a source checkout or release archive, try the [short Python example](docs/usage.md#python-connectivity-test): `python3 scripts/test_clivoy.py`.
 Install `openai` and choose the model in the file as described in the guide.
 
 ## Use your SDK

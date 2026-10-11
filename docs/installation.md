@@ -1,8 +1,36 @@
 # Installation guide
 
-Build from a local checkout, then set up the AI CLI or model server you want to
-use. Clivoy itself needs no GPU, Python runtime or third-party Go dependencies.
-The provider's own runtime and account requirements still apply.
+Install a package or build from source, then set up the AI CLI or model server
+you want to use. Clivoy itself needs no GPU or Python runtime. The provider's
+own runtime and account requirements still apply.
+
+## Homebrew (macOS and Linux)
+
+```sh
+brew install wklee610/clivoy/clivoy
+clivoy version
+```
+
+## APT (Debian and Ubuntu)
+
+First follow the [signed APT repository setup](distribution.md#apt) to verify
+the public signing key and add the repository. Then install:
+
+```sh
+sudo apt-get install clivoy
+clivoy version
+```
+
+For Windows or a standalone executable, download the matching OS/architecture
+archive from [GitHub Releases](https://github.com/wklee610/clivoy/releases/latest)
+and verify it against the release's `checksums.txt`. Extract the archive and
+put the executable on `PATH`, or run it directly from the extracted directory.
+
+Next, [set up one provider](providers.md): Codex, Claude Code, Gemini CLI, Grok
+Build or Ollama. Clivoy uses the login of the user who starts a CLI. You do not
+have to install all four CLIs. For Ollama, start its local server and download a
+model using the [Ollama setup](providers.md#ollama); new Clivoy configurations
+already include the local connection. The xAI API needs a key and explicit setup.
 
 ## Build from source
 
@@ -14,22 +42,16 @@ go build -o clivoy ./cmd/clivoy
 ```
 
 On Windows, use `go build -o clivoy.exe ./cmd/clivoy` and `.\clivoy.exe version`.
-The examples below use this local executable. If you place it in a directory on
-`PATH`, use `clivoy` from any directory.
-
-Next, [set up one provider](providers.md): Codex, Claude Code, Gemini CLI, Grok
-Build or Ollama. Clivoy uses the login of the user who starts a CLI. You do not
-have to install all four CLIs. For Ollama, start its local server and download a
-model using the [Ollama setup](providers.md#ollama); new Clivoy configurations
-already include the local connection. The xAI API needs a key and explicit setup.
+For the commands below, place the executable on `PATH` or replace `clivoy` with
+`./clivoy` (Windows: `.\clivoy.exe`).
 
 ## macOS and Linux
 
-From the repository root:
+After installing Clivoy and preparing a provider:
 
 ```sh
-./clivoy start
-export CLIVOY_API_KEY="$(./clivoy auth)"
+clivoy start
+export CLIVOY_API_KEY="$(clivoy auth)"
 curl -sS http://127.0.0.1:9610/v1/chat/completions \
   -H "Authorization: Bearer $CLIVOY_API_KEY" \
   -H 'Content-Type: application/json' \
@@ -42,10 +64,9 @@ The request calls the selected provider and uses that account's quota.
 
 ## Windows PowerShell
 
-In the repository root:
+From the directory containing the downloaded or built `clivoy.exe`:
 
 ```powershell
-go build -o clivoy.exe ./cmd/clivoy
 .\clivoy.exe start
 $env:CLIVOY_API_KEY = .\clivoy.exe auth
 
@@ -95,7 +116,7 @@ For alternate paths, key rotation and foreground execution, see [usage](usage.md
 ## If a CLI is not detected
 
 ```sh
-./clivoy doctor
+clivoy doctor
 ```
 
 `doctor` checks executable discovery and gateway-key configuration. It does not
@@ -119,23 +140,18 @@ Use the executable's absolute path. For example, set `providers.gemini` to:
 Keep the rest of the configuration. Windows JSON paths escape backslashes, for example
 `"command": "C:\\path\\to\\grok.exe"`. An explicit `command` takes precedence
 and does not fall back to another installation on failure. If the executable
-moves, update `command` or clear it to resume automatic discovery. Run `./clivoy doctor`
-to verify the path, then `./clivoy restart` to apply it. See
+moves, update `command` or clear it to resume automatic discovery. Run `clivoy doctor`
+to verify the path, then `clivoy restart` to apply it. See
 [CLI discovery](compatibility.md#cli-discovery-and-model-selection) for details.
 
 ## Package installation
 
-The repository contains packaging for the channels below. **These commands work
-only after the source or release has been published to that channel.** Their
-presence here does not confirm that a public package is currently available.
-Use the source build above for an unpublished checkout.
-
-| Channel | Installation after publication |
+| Channel | Installation |
 | --- | --- |
 | Homebrew, macOS/Linux | `brew install wklee610/clivoy/clivoy` |
 | Go module | `go install github.com/wklee610/clivoy/cmd/clivoy@latest` |
-| GitHub Releases | Download your OS/architecture archive and verify `checksums.txt` |
-| APT, Debian/Ubuntu | Add the signed repository, then `sudo apt-get install clivoy` |
+| GitHub Releases | Download an [OS/architecture archive](https://github.com/wklee610/clivoy/releases/latest) and verify `checksums.txt` |
+| APT, Debian/Ubuntu | [Add the signed repository](distribution.md#apt), then `sudo apt-get install clivoy` |
 | Container | `docker pull ghcr.io/wklee610/clivoy:latest` |
 
 Native packaging targets Windows, macOS and Linux on x86-64 and ARM64.
