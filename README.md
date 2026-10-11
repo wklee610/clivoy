@@ -24,6 +24,15 @@ macOS, Linux and Windows.
 brew install wklee610/clivoy/clivoy
 ```
 
+**Go 1.25 or later — macOS, Linux and Windows:**
+
+```sh
+go install github.com/wklee610/clivoy/cmd/clivoy@latest
+```
+
+Make sure Go's binary directory is on `PATH`: `GOBIN` if set, otherwise
+`GOPATH/bin` (usually `~/go/bin` or `%USERPROFILE%\go\bin` on Windows).
+
 **Debian and Ubuntu:** [set up the APT repository](docs/installation.md#apt-debian-and-ubuntu),
 then run `sudo apt-get install clivoy`.
 For Windows, download a [release archive](https://github.com/wklee610/clivoy/releases/latest).

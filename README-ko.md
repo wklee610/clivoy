@@ -24,6 +24,15 @@ Clivoy 실행에는 GPU나 Python이 필요 없습니다. macOS, Linux, Windows�
 brew install wklee610/clivoy/clivoy
 ```
 
+**Go 1.25 이상 — macOS·Linux·Windows:**
+
+```sh
+go install github.com/wklee610/clivoy/cmd/clivoy@latest
+```
+
+Go 실행 파일 설치 경로를 `PATH`에 추가하세요. `GOBIN`을 설정했다면 해당 경로를,
+그 외에는 `GOPATH/bin`을 사용합니다. 기본값은 `~/go/bin`이며 Windows는 `%USERPROFILE%\go\bin`입니다.
+
 **Debian·Ubuntu:** [APT 저장소를 설정](docs/installation.md#apt-debian-and-ubuntu)한 뒤
 `sudo apt-get install clivoy`로 설치합니다.
 Windows는 [릴리스 파일](https://github.com/wklee610/clivoy/releases/latest)을 받으세요.
