@@ -1,0 +1,16 @@
+{
+  "listen": "0.0.0.0:9610",
+  "api_key_env": "CLIVOY_API_KEY",
+  "request_timeout": "5m",
+  "max_concurrent": 8,
+  "max_queue": 32,
+  "max_body_bytes": 1048576,
+  "providers": {
+    "vllm": {"type": "openai", "base_url": "http://127.0.0.1:8000/v1"},
+    "litellm": {"type": "openai", "base_url": "http://127.0.0.1:4000/v1", "api_key_env": "LITELLM_API_KEY"}
+  },
+  "models": {
+    "vllm-model": {"provider": "vllm", "model": "your-served-model"},
+    "litellm-model": {"provider": "litellm", "model": "your-litellm-alias"}
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "listen": "0.0.0.0:9610",
+  "api_key_env": "CLIVOY_API_KEY",
+  "request_timeout": "5m",
+  "max_concurrent": 8,
+  "max_queue": 32,
+  "max_body_bytes": 33554432,
+  "providers": {
+    "codex": {"type": "codex"},
+    "claude": {"type": "claude"},
+    "vision": {
+      "type": "openai",
+      "base_url": "http://127.0.0.1:8000/v1"
+    },
+    "images": {
+      "type": "openai",
+      "base_url": "http://127.0.0.1:8001/v1"
+    }
+  },
+  "models": {
+    "codex": {"provider": "codex", "capabilities": ["chat", "vision"]},
+    "claude": {"provider": "claude", "capabilities": ["chat", "vision"]},
+    "vision-model": {
+      "provider": "vision",
+      "model": "your-vision-model",
+      "capabilities": ["chat", "vision"]
+    },
+    "image-model": {
+      "provider": "images",
+      "model": "your-image-model",
+      "capabilities": ["image_generation"]
+    }
+  }
+}

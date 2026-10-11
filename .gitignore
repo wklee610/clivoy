@@ -1,0 +1,16 @@
+/clivoy
+/clivoy.exe
+/clivoy.json
+/dist/
+/build/
+/.cache/
+/.venv/
+.env
+.env.*
+__pycache__/
+*.pyc
+# Local gateway credentials
+auth.json
+*.key
+coverage.out
+.DS_Store

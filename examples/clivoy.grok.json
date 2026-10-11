@@ -1,0 +1,20 @@
+{
+  "listen": "0.0.0.0:9610",
+  "api_key_env": "CLIVOY_API_KEY",
+  "request_timeout": "5m",
+  "max_concurrent": 8,
+  "max_queue": 32,
+  "max_body_bytes": 33554432,
+  "providers": {
+    "grok": {"type": "grok"},
+    "xai": {
+      "type": "openai",
+      "base_url": "https://api.x.ai/v1",
+      "api_key_env": "XAI_API_KEY"
+    }
+  },
+  "models": {
+    "grok": {"provider": "grok", "capabilities": ["chat"]},
+    "grok-api": {"provider": "xai", "model": "grok-4.7", "capabilities": ["chat", "vision"]}
+  }
+}

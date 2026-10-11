@@ -1,0 +1,8 @@
+# Run a separate LiteLLM proxy with: litellm --config examples/sdk/litellm-config.yaml
+# Install LiteLLM separately; set CLIVOY_API_KEY in that proxy's environment.
+model_list:
+  - model_name: clivoy-codex
+    litellm_params:
+      model: openai/codex
+      api_base: http://127.0.0.1:9610/v1
+      api_key: os.environ/CLIVOY_API_KEY

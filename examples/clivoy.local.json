@@ -1,0 +1,23 @@
+{
+  "listen": "0.0.0.0:9610",
+  "api_key_env": "CLIVOY_API_KEY",
+  "request_timeout": "5m",
+  "max_concurrent": 8,
+  "max_queue": 32,
+  "max_body_bytes": 33554432,
+  "providers": {
+    "codex": {"type": "codex"},
+    "claude": {"type": "claude"},
+    "gemini": {"type": "gemini"},
+    "grok": {"type": "grok"},
+    "ollama": {"type": "ollama"}
+  },
+  "models": {
+    "codex": {"provider": "codex", "capabilities": ["chat", "vision"]},
+    "claude": {"provider": "claude", "capabilities": ["chat", "vision"]},
+    "gemini": {"provider": "gemini", "capabilities": ["chat"]},
+    "grok": {"provider": "grok", "capabilities": ["chat"]},
+    "codex-sol": {"provider": "codex", "model": "gpt-6.1-sol", "capabilities": ["chat", "vision"]},
+    "claude-sonnet": {"provider": "claude", "model": "claude-sonnet-4-6", "capabilities": ["chat", "vision"]}
+  }
+}

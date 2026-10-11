@@ -1,0 +1,3 @@
+# Official SDK versions exercised by scripts/sdk_smoke.py.
+openai==3.28.0
+anthropic==1.13.0

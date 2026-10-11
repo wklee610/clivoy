@@ -1,0 +1,209 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+# Serialise releases so an older run cannot overwrite a newer tap/APT/latest.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  prepare:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate stable version and publishing prerequisites
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          HOMEBREW_TAP_SSH_KEY: ${{ secrets.HOMEBREW_TAP_SSH_KEY }}
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_FINGERPRINT: ${{ vars.APT_GPG_FINGERPRINT }}
+        shell: bash
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo 'Only stable vMAJOR.MINOR.PATCH tags are published'; exit 1; }
+          test -n "$HOMEBREW_TAP_SSH_KEY" || { echo 'Configure HOMEBREW_TAP_SSH_KEY first'; exit 1; }
+          test -n "$APT_GPG_PRIVATE_KEY" || { echo 'Configure APT_GPG_PRIVATE_KEY first'; exit 1; }
+          [[ "$APT_GPG_FINGERPRINT" =~ ^[[:xdigit:]]{40}$ ]] || { echo 'Configure APT_GPG_FINGERPRINT first'; exit 1; }
+
+  binaries:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: v2.14.0
+          args: release --clean --skip=publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate Homebrew formula and stage complete release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          APT_GPG_FINGERPRINT: ${{ vars.APT_GPG_FINGERPRINT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          python3 scripts/release-homebrew.py --tag "$RELEASE_TAG" --repository "$GH_REPO"
+          ruby -c dist/clivoy.rb
+          (cd dist && sha256sum clivoy.rb >> checksums.txt)
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          fingerprint = os.environ["APT_GPG_FINGERPRINT"].upper()
+          repository = os.environ["GH_REPO"]
+          tag = os.environ["RELEASE_TAG"]
+          notes = (
+              "Install with Homebrew:\n\n"
+              "```sh\nbrew install wklee610/clivoy/clivoy\n```\n\n"
+              "For Debian/Ubuntu, [add the signed APT repository]"
+              f"(https://github.com/{repository}/blob/{tag}/docs/distribution.md#apt), then run:\n\n"
+              "```sh\nsudo apt-get update\nsudo apt-get install clivoy\n```\n\n"
+              f"APT signing-key fingerprint: `{fingerprint}`.\n\n"
+              "Before trusting the downloaded public key, compare its full fingerprint "
+              "with the value above using `gpg --show-keys --with-fingerprint`.\n\n"
+          )
+          (Path(os.environ["RUNNER_TEMP"]) / "clivoy-release-notes.md").write_text(notes, encoding="utf-8")
+          PY
+          gh release create "$RELEASE_TAG" dist/*.tar.gz dist/*.zip dist/*.deb dist/clivoy.rb dist/checksums.txt --verify-tag --draft --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/clivoy-release-notes.md" --generate-notes
+          gh release edit "$RELEASE_TAG" --draft=false --latest
+
+  homebrew:
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: wklee610/homebrew-clivoy
+          ssh-key: ${{ secrets.HOMEBREW_TAP_SSH_KEY }}
+          path: tap
+      - name: Download and verify published formula
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release download "$RELEASE_TAG" --pattern clivoy.rb --pattern checksums.txt --dir release
+          (cd release && sha256sum --check --ignore-missing checksums.txt)
+          mkdir -p tap/Formula
+          cp release/clivoy.rb tap/Formula/clivoy.rb
+      - name: Update Homebrew tap
+        working-directory: tap
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Formula/clivoy.rb
+          if ! git diff --cached --quiet; then
+            git commit -m "clivoy $RELEASE_TAG"
+            git push
+          fi
+
+  apt-build:
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install APT tooling
+        run: sudo apt-get update && sudo apt-get install -y apt-utils gnupg
+      - name: Download and verify release packages
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release download "$RELEASE_TAG" --pattern '*.deb' --pattern checksums.txt --dir packages
+          (cd packages && sha256sum --check --ignore-missing checksums.txt)
+      - name: Build and sign APT repository
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+          APT_GPG_FINGERPRINT: ${{ vars.APT_GPG_FINGERPRINT }}
+        shell: bash
+        run: |
+          export GNUPGHOME
+          GNUPGHOME=$(mktemp -d)
+          trap 'gpgconf --kill gpg-agent; rm -rf "$GNUPGHOME"' EXIT
+          printf '%s\n' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          bash scripts/apt-repository.sh packages site/apt
+          touch site/.nojekyll
+          cp packaging/apt/index.html site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  apt-deploy:
+    needs: apt-build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
+
+  container:
+    needs: binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Container metadata
+        id: metadata
+        env:
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          echo "image=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ steps.metadata.outputs.image }}:${{ github.ref_name }}
+            ${{ steps.metadata.outputs.image }}:latest
+          build-args: |
+            VERSION=${{ steps.metadata.outputs.version }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ steps.metadata.outputs.date }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.metadata.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}

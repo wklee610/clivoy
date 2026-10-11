@@ -1,0 +1,77 @@
+version: 2
+
+project_name: clivoy
+
+builds:
+  - id: clivoy
+    main: ./cmd/clivoy
+    binary: clivoy
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+archives:
+  - id: clivoy
+    ids: [clivoy]
+    formats: [tar.gz]
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - README-ko.md
+      - SECURITY.md
+      - CONTRIBUTING.md
+      - src: examples/*.json
+        dst: examples
+      - src: examples/sdk/*
+        dst: examples/sdk
+      - src: scripts/requirements-sdk.txt
+        dst: scripts/requirements-sdk.txt
+      - src: scripts/test_clivoy.py
+        dst: scripts/test_clivoy.py
+      - src: docs/*.md
+        dst: docs
+
+nfpms:
+  - id: deb
+    ids: [clivoy]
+    package_name: clivoy
+    file_name_template: '{{ .ConventionalFileName }}'
+    homepage: https://github.com/wklee610/clivoy
+    maintainer: Clivoy maintainers <wklee610@users.noreply.github.com>
+    description: Local coding CLI and model server API gateway
+    license: Apache-2.0
+    formats: [deb]
+    section: utils
+    priority: optional
+    bindir: /usr/bin
+    dependencies: [ca-certificates]
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/clivoy/copyright
+      - src: docs/distribution.md
+        dst: /usr/share/doc/clivoy/distribution.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: '0.0.0-dev'
+
+changelog:
+  sort: asc
+
+# The release workflow stages the generated Homebrew formula before publishing
+# a GitHub release, so all assets are present when the release becomes public.
+release:
+  github:
+    owner: wklee610
+    name: clivoy
