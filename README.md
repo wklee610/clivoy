@@ -93,6 +93,11 @@ New configurations include all four CLI aliases and a local Ollama connection.
 For an existing configuration, [add the providers you need](docs/providers.md#existing-configurations).
 For a direct xAI API connection, use the optional [Grok API setup](docs/providers.md#grok-xai-api).
 
+CLI `command` settings accept arrays such as `["codex", "--yolo"]` and
+`["claude", "--dangerously-skip-permissions"]`. These options explicitly enable
+execution without approval prompts; defaults remain unchanged. See
+[CLI options and execution controls](docs/providers.md#codex-and-claude).
+
 **Using Ollama?** [Install and start Ollama](docs/providers.md#ollama), run
 `ollama pull llama3.2:3b`, then use `model: "ollama/llama3.2:3b"` in the request.
 You can substitute another model already installed in Ollama.

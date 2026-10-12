@@ -91,6 +91,12 @@ curl -sS http://127.0.0.1:9610/v1/chat/completions \
 [필요한 제공자 항목을 추가](docs/providers.md#existing-configurations)하세요.
 xAI API에 직접 연결하려면 [Grok API 설정](docs/providers.md#grok-xai-api)을 참고하세요.
 
+CLI의 `command`는 `["codex", "--yolo"]`,
+`["claude", "--dangerously-skip-permissions"]`처럼 실행 파일과 인수를 배열로
+설정할 수 있습니다. 이 옵션을 직접 추가하면 승인 확인 없이 CLI 도구를 실행할 수
+있으며, 기본 설정은 유지됩니다. 기존 실행 파일 문자열도 계속 지원합니다.
+[CLI 옵션과 실행 권한 설정](docs/providers.md#codex-and-claude)을 참고하세요.
+
 **Ollama를 사용한다면:** [Ollama를 설치하고 실행](docs/providers.md#ollama)한 뒤
 `ollama pull llama3.2:3b`로 모델을 받고, 요청에 `model: "ollama/llama3.2:3b"`를 넣으세요.
 이미 설치한 다른 모델 이름으로 바꿔도 됩니다.

@@ -18,7 +18,8 @@ func (p *cliProvider) prepareInput(req engine.Request) (args []string, input str
 		return p.prepareGrokInput(req)
 	}
 	args = p.args(req)
-	input = cliPrompt(req)
+	allowTools := p.kind == "codex" && p.hasCommandFlag("--yolo", "--dangerously-bypass-approvals-and-sandbox") || p.kind == "claude" && p.hasCommandFlag("--dangerously-skip-permissions")
+	input = cliPromptWithTools(req, allowTools)
 	if p.kind == "gemini" {
 		// Gemini expands @file references before sending the prompt. Preserve
 		// literal @ characters inside the JSON transcript without invoking it.

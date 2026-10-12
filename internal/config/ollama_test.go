@@ -17,7 +17,7 @@ func TestDefaultOllamaProviderDoesNotAssumeInstalledModel(t *testing.T) {
 	if !ok || p.Type != "ollama" || !p.SupportsNativeModels() || p.IsCLI() {
 		t.Fatalf("default Ollama provider is not an HTTP native-model backend: %+v", p)
 	}
-	if p.BaseURL != "" || p.APIKeyEnv != "" || p.Command != "" || p.WorkDir != "" {
+	if p.BaseURL != "" || p.APIKeyEnv != "" || len(p.Command) != 0 || p.WorkDir != "" {
 		t.Fatalf("default Ollama provider unexpectedly requires local configuration: %+v", p)
 	}
 	for alias, m := range c.Models {

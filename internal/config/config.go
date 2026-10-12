@@ -16,11 +16,11 @@ import (
 )
 
 type Provider struct {
-	Type      string `json:"type"`
-	Command   string `json:"command,omitempty"`
-	WorkDir   string `json:"work_dir,omitempty"`
-	BaseURL   string `json:"base_url,omitempty"`
-	APIKeyEnv string `json:"api_key_env,omitempty"`
+	Type      string  `json:"type"`
+	Command   Command `json:"command,omitempty"`
+	WorkDir   string  `json:"work_dir,omitempty"`
+	BaseURL   string  `json:"base_url,omitempty"`
+	APIKeyEnv string  `json:"api_key_env,omitempty"`
 }
 
 func (p Provider) IsCLI() bool {
@@ -208,6 +208,9 @@ func (c Config) Validate() error {
 		if strings.TrimSpace(name) == "" {
 			return fmt.Errorf("provider names must not be empty")
 		}
+		if err := p.Command.validate(); err != nil {
+			return fmt.Errorf("provider %q: %w", name, err)
+		}
 		switch p.Type {
 		case "codex", "claude", "gemini", "grok":
 			if p.BaseURL != "" || p.APIKeyEnv != "" {
@@ -220,7 +223,7 @@ func (c Config) Validate() error {
 			if p.Type == "openai" && p.BaseURL == "" {
 				return fmt.Errorf("provider %q: base_url is required", name)
 			}
-			if p.Command != "" || p.WorkDir != "" {
+			if len(p.Command) != 0 || p.WorkDir != "" {
 				return fmt.Errorf("provider %q: command and work_dir apply only to CLI providers", name)
 			}
 		default:

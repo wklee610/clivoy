@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -183,14 +184,29 @@ func TestInitSavesDiscoveredCLICommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Providers["claude"].Command != command {
+	if !reflect.DeepEqual(c.Providers["claude"].Command, config.Command{command}) {
 		t.Fatalf("init did not save the detected CLI path: %q", c.Providers["claude"].Command)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved struct {
+		Providers map[string]struct {
+			Command []string `json:"command"`
+		} `json:"providers"`
+	}
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatalf("init must save command as a JSON array: %v", err)
+	}
+	if !reflect.DeepEqual(saved.Providers["claude"].Command, []string{command}) {
+		t.Fatalf("saved command array = %q", saved.Providers["claude"].Command)
 	}
 }
 
 func TestDiscoveredCommandsPreserveOverridesAndCLIEntrypoints(t *testing.T) {
 	c := config.Default()
-	c.Providers["codex"] = config.Provider{Type: "codex", Command: "/custom/codex"}
+	c.Providers["codex"] = config.Provider{Type: "codex", Command: config.Command{"/custom/codex", "--yolo"}}
 	c.Providers["http"] = config.Provider{Type: "openai", BaseURL: "http://localhost/v1"}
 	setDiscoveredCLICommands(&c, func(kind, command string) (clidiscovery.Resolution, error) {
 		if kind == "codex" || kind == "ollama" || kind == "openai" || command != "" {
@@ -204,15 +220,15 @@ func TestDiscoveredCommandsPreserveOverridesAndCLIEntrypoints(t *testing.T) {
 			Command: "/installed/" + kind,
 		}, nil
 	})
-	if c.Providers["codex"].Command != "/custom/codex" {
+	if !reflect.DeepEqual(c.Providers["codex"].Command, config.Command{"/custom/codex", "--yolo"}) {
 		t.Fatal("explicit command was changed")
 	}
 	for _, name := range []string{"claude", "gemini"} {
-		if c.Providers[name].Command != "/installed/"+name {
+		if !reflect.DeepEqual(c.Providers[name].Command, config.Command{"/installed/" + name}) {
 			t.Fatalf("%s saved the interpreter instead of the CLI entrypoint", name)
 		}
 	}
-	if c.Providers["grok"].Command != "" {
+	if len(c.Providers["grok"].Command) != 0 {
 		t.Fatal("missing CLI acquired a command")
 	}
 }
@@ -235,6 +251,33 @@ func TestInitMissingCLIGuidance(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "providers.codex.command") || strings.Contains(out.String(), "http") {
 		t.Fatal("init reported guidance for an installed CLI or HTTP provider")
+	}
+}
+
+func TestDoctorUsesOnlyConfiguredExecutable(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "path with spaces")
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	name := "codex"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	executable := filepath.Join(dir, name)
+	if err := os.WriteFile(executable, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	c := config.Default()
+	c.Providers = map[string]config.Provider{
+		"codex": {Type: "codex", Command: config.Command{executable, "--yolo"}},
+	}
+	t.Setenv(c.APIKeyEnv, "test-key")
+	var out bytes.Buffer
+	if err := doctor(c, filepath.Join(t.TempDir(), "clivoy.json"), &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "codex: "+executable+" (configured; login not checked)") {
+		t.Fatalf("doctor did not resolve the executable separately from its arguments: %s", out.String())
 	}
 }
 

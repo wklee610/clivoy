@@ -163,8 +163,11 @@ creates a configuration and adjacent `auth.json` at your chosen path. Relative f
 paths are resolved from the current directory. `auth_file` stays relative to
 its configuration's directory.
 
-New initialization also saves detected CLI absolute paths in
-`providers.<name>.command` for later runs. Missing CLIs keep that field omitted
+New initialization also saves detected CLI absolute paths as one-element arrays in
+`providers.<name>.command` for later runs. Add optional CLI arguments as separate
+array entries, for example `["codex", "--yolo"]`; see [CLI options and execution
+controls](providers.md#codex-and-claude). Legacy executable strings still work.
+Missing CLIs keep that field omitted
 and use automatic discovery. Existing configurations are not rewritten; `doctor`
 and `models` are read-only. If a saved executable moves, update its `command` or
 clear it to resume automatic discovery, then restart. See [manual path setup](installation.md#if-a-cli-is-not-detected).

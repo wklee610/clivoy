@@ -91,7 +91,7 @@ func TestGeminiRequestIsolationAndLiteralFileReferences(t *testing.T) {
 }
 
 func TestGeminiRejectsImagesBeforeStartingCLI(t *testing.T) {
-	p, err := NewCLI("gemini", "not-installed", "")
+	p, err := NewCLI("gemini", []string{"not-installed"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

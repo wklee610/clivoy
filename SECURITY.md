@@ -72,17 +72,20 @@ configured CLI provider; Clivoy validates the ID and passes it as a separate
 `--model` argument. Ollama providers also accept native model IDs, passed through
 the configured server's HTTP API. Exact configuration aliases take precedence.
 Generic `openai` providers and image generation accept configured aliases only.
-When `command` is empty or omitted, Clivoy discovers installed CLIs through `PATH` and
+The administrator can supply `command` as an executable-and-arguments array;
+its entries are passed literally without shell parsing. Legacy executable-only
+strings are still supported. When `command` is omitted, `[]`, `null` or the legacy
+`""`, Clivoy discovers installed CLIs through `PATH` and
 known installation locations, including supported app bundles and npm entries.
 Keep those locations under trusted control. An explicit `command` is authoritative
 and never falls back to another installation on failure.
-New configuration initialization saves detected absolute paths in each provider's
-`command`; subsequent runs use those saved paths. Existing configurations are not
+New configuration initialization saves detected absolute paths as one-element
+arrays in each provider's `command`; subsequent runs use those saved paths. Existing configurations are not
 rewritten automatically, and `doctor` and `models` do not save discovery results.
 Clear `command` to resume automatic discovery if its executable moves. A missing
 CLI warning during initialization does not prevent configuration/authentication file
-creation; set the relevant provider's `command` to the correct absolute
-executable path if needed.
+creation; set the first entry of the relevant provider's `command` to the correct
+absolute executable path if needed.
 CLI processes are launched without an intermediate shell. Codex, Claude and
 Gemini receive prompts on stdin; Grok reads a private temporary prompt file.
 Prompt content is never passed as a command-line argument.
@@ -98,7 +101,8 @@ state root does not relocate them. Grok accesses its native login file through
 `GROK_AUTH_PATH` as described below.
 
 `clivoy models` starts configured CLIs to query their metadata interfaces without
-a generation prompt; `--refresh` has the same behavior. Metadata subprocesses
+a generation prompt; `--refresh` has the same behavior. Only the configured
+executable is used, without the additional generation arguments. Metadata subprocesses
 use temporary working directories, bounded execution time and the credential
 environment filtering described above. Claude uses bare initialization;
 Gemini and Grok also apply their isolated integration settings described below.
@@ -125,11 +129,23 @@ backends and are never fetched by Clivoy. Configure the upstream's network acces
 appropriately for its callers: that upstream may retrieve caller-supplied URLs.
 Clivoy also returns generated image URLs without downloading them.
 
-Codex is invoked with read-only sandboxing, no interactive approvals, ephemeral
+By default, Codex is invoked with read-only sandboxing, no interactive approvals, ephemeral
 sessions, web search disabled, and user configuration/rules ignored. Claude uses
 no tools, strict empty MCP configuration, no session persistence, no slash commands,
 no browser integration, and hooks disabled where CLI settings allow it.
 Enterprise-managed hooks can override user hook settings.
+
+The administrator can explicitly opt into less restricted execution with
+`"command": ["codex", "--yolo"]` (or
+`--dangerously-bypass-approvals-and-sandbox`) and
+`"command": ["claude", "--dangerously-skip-permissions"]`. For Codex, Clivoy
+omits its read-only sandbox and fixed approval setting when either option is
+present. For Claude, it omits the empty tool list and fixed `dontAsk` permission
+mode. The CLI can then use its tools without approval prompts and act with the
+server user's filesystem and process permissions. The remaining output,
+configuration and session controls still apply. These options are never added
+by initialization, and API callers cannot set them. Native tool activity remains
+inside the CLI and is not exposed as API function calls.
 
 Gemini receives a temporary system-settings file that overrides its user and
 workspace tool, hook, MCP, skill, IDE and context integrations. Extensions are

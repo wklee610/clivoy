@@ -211,14 +211,14 @@ func initConfig(args []string, out, errOut io.Writer) error {
 func setDiscoveredCLICommands(c *config.Config, resolve func(string, string) (clidiscovery.Resolution, error)) {
 	for _, name := range providerNames(*c) {
 		p := c.Providers[name]
-		if !p.IsCLI() || p.Command != "" {
+		if !p.IsCLI() || len(p.Command) != 0 {
 			continue
 		}
 		resolved, err := resolve(p.Type, "")
 		if err != nil {
 			continue
 		}
-		p.Command = resolved.Command
+		p.Command = config.Command{resolved.Command}
 		c.Providers[name] = p
 	}
 }
@@ -229,8 +229,8 @@ func reportMissingCLIs(c config.Config, path string, out io.Writer, resolve func
 		if !p.IsCLI() {
 			continue
 		}
-		if _, err := resolve(p.Type, p.Command); err != nil {
-			fmt.Fprintf(out, "%s CLI could not be resolved. Set providers.%s.command in %q to the absolute path of the %s executable, then run clivoy doctor.\n", p.Type, name, path, p.Type)
+		if _, err := resolve(p.Type, p.Command.Executable()); err != nil {
+			fmt.Fprintf(out, "%s CLI could not be resolved. Set providers.%s.command in %q to an array beginning with the absolute path of the %s executable, then run clivoy doctor.\n", p.Type, name, path, p.Type)
 		}
 	}
 }
@@ -458,13 +458,13 @@ func doctor(c config.Config, configPath string, out io.Writer) error {
 			fmt.Fprintf(out, "%s: OpenAI-compatible HTTP backend (connectivity not checked)\n", name)
 			continue
 		}
-		resolved, err := clidiscovery.Resolve(p.Type, p.Command)
+		resolved, err := clidiscovery.Resolve(p.Type, p.Command.Executable())
 		if err != nil {
 			fmt.Fprintf(out, "%s: %v\n", name, err)
-			fmt.Fprintf(out, "  Set providers.%s.command in the config above to the executable's absolute path.\n", name)
+			fmt.Fprintf(out, "  Set providers.%s.command in the config above to an array beginning with the executable's absolute path.\n", name)
 		} else {
 			source := "auto-detected"
-			if p.Command != "" {
+			if len(p.Command) != 0 {
 				source = "configured"
 			}
 			fmt.Fprintf(out, "%s: %s (%s; login not checked)\n", name, resolved.Command, source)
