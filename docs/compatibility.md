@@ -73,22 +73,32 @@ authenticated live CLI calls. Older versions may lack required flags. See the
 
 ## CLI discovery and model selection
 
-When creating a configuration, `init` saves detected CLI absolute paths in
-`providers.<name>.command`. Automatic initialization on the first `start` or
+When creating a configuration, `init` saves each detected CLI absolute path as a
+one-element array in `providers.<name>.command`. Automatic initialization on the first `start` or
 `serve` does the same. Existing configurations are not rewritten on upgrade.
 
-When `command` is empty or omitted, CLI discovery checks `PATH` and standard installation
+Since v1.0.1, `command` accepts an executable-and-arguments array, for example
+`["codex", "--yolo"]` or `["claude", "--dangerously-skip-permissions"]`.
+Each argument is passed literally without shell parsing. The executable-only
+strings used by v1.0.0 remain supported; a string such as `"codex --yolo"` is
+treated as one executable name, not an executable and a flag. These permission
+options opt into CLI tools and remove the corresponding default execution
+restrictions; see [provider setup](providers.md#codex-and-claude). API function-tool
+support is unchanged. Configurations without these options retain their defaults.
+
+When `command` is omitted, `[]`, `null` or the legacy `""`, CLI discovery checks `PATH` and standard installation
 locations, including Codex/ChatGPT app bundles on macOS and supported npm
 installations on Windows. Windows npm entrypoints are resolved to a native
 executable or Node script without launching a `.cmd` wrapper through a shell.
 An explicit provider `command` is authoritative: lookup or launch errors do not
 fall back to another installation. Bare `clivoy` shows command help;
-`clivoy doctor` shows paths using the same resolver. `doctor` and `models` are
+`clivoy doctor` shows paths using the same resolver. Discovery and model metadata
+queries use only the executable, without configured generation arguments. `doctor` and `models` are
 read-only and do not save newly discovered paths. If a saved executable moves,
 update `command` or clear it to resume automatic discovery, then restart.
 If `init` warns that a CLI is missing, configuration and authentication file
 creation can still succeed. Edit the relevant provider's `command` in the
-generated configuration to use the actual absolute executable path. Windows paths must escape backslashes in JSON;
+generated configuration to an array beginning with the actual absolute executable path. Windows paths must escape backslashes in JSON;
 see the [setup examples](installation.md#if-a-cli-is-not-detected).
 
 `clivoy models [--config path]` queries the configured providers on every run,

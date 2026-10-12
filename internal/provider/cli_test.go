@@ -127,7 +127,7 @@ func fakeCLI(t *testing.T, kind, mode string) engine.Provider {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := NewCLI(kind, binary, "")
+	p, err := NewCLI(kind, []string{binary}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +320,7 @@ func TestCLIRejectsUnsupportedOptions(t *testing.T) {
 }
 
 func TestMissingCLIIsLazy(t *testing.T) {
-	p, err := NewCLI("codex", "clivoy-intentionally-missing-test-binary", "")
+	p, err := NewCLI("codex", []string{"clivoy-intentionally-missing-test-binary"}, "")
 	if err != nil {
 		t.Fatalf("configuration should not require every CLI to be installed: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestCLIExcludesGatewaySecretsAndKeepsCLIAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := NewCLI("codex", binary, "", "CLIVOY_TEST_CUSTOM_KEY", "CLIVOY_TEST_HTTP_KEY")
+	p, err := NewCLI("codex", []string{binary}, "", "CLIVOY_TEST_CUSTOM_KEY", "CLIVOY_TEST_HTTP_KEY")
 	if err != nil {
 		t.Fatal(err)
 	}

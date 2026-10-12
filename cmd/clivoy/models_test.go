@@ -59,14 +59,14 @@ func TestModelInspectionBeforeInitDoesNotCreateState(t *testing.T) {
 func TestLiveModelChoicesPreserveAliasesAndRejectFallbacks(t *testing.T) {
 	c := config.Default()
 	c.Providers = map[string]config.Provider{
-		"local": {Type: "claude", Command: "/configured/claude"},
+		"local": {Type: "claude", Command: config.Command{"/configured/claude", "--dangerously-skip-permissions"}},
 		"other": {Type: "gemini"},
 	}
 	c.Models = map[string]config.Model{"local/reported": {Provider: "other", Model: "pinned"}}
 	query := func(_ context.Context, kind, command string, _ ...string) ([]modelcatalog.Model, error) {
 		if kind == "claude" {
 			if command != "/configured/claude" {
-				t.Fatal("live discovery ignored the configured command")
+				t.Fatal("live discovery must use only the configured executable")
 			}
 			return []modelcatalog.Model{{ID: "reported"}, {ID: "second"}}, nil
 		}

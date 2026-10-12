@@ -94,9 +94,9 @@ func TestCLIRuntimeFilesUseTemporaryDirectoriesOnDemand(t *testing.T) {
 				for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
 					t.Setenv(name, tempRoot)
 				}
-				p, err = NewCLI("codex", binary, "")
+				p, err = NewCLI("codex", []string{binary}, "")
 			} else {
-				p, err = NewCLIWithTempDir("codex", binary, "", tempRoot)
+				p, err = NewCLIWithTempDir("codex", []string{binary}, "", tempRoot)
 			}
 			if err != nil {
 				t.Fatal(err)

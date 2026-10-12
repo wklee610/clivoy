@@ -63,7 +63,7 @@ func TestGrokCLIIsolatesRequestAndPreservesNativeLoginRefresh(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	backend, err := NewCLI("grok", binary, "")
+	backend, err := NewCLI("grok", []string{binary}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

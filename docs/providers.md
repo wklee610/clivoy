@@ -36,6 +36,28 @@ lets the CLI select its model. Codex runs with user configuration ignored; use
 a specific model when you need one. For example, `claude/sonnet` selects that
 CLI's Sonnet selector. `clivoy models` queries each CLI's metadata interface.
 
+To supply CLI options, make `command` an array in `clivoy.json`. Its first entry
+is the executable (keep the absolute path saved by `init` if available), followed
+by one entry per argument. For example, these provider entries opt into execution
+without approval prompts:
+
+```json
+{
+  "codex": {"type": "codex", "command": ["codex", "--yolo"]},
+  "claude": {"type": "claude", "command": ["claude", "--dangerously-skip-permissions"]}
+}
+```
+
+Merge these entries into `providers`, then run `clivoy restart`. Codex also
+accepts `--dangerously-bypass-approvals-and-sandbox` instead of `--yolo`. Those
+Codex options remove Clivoy's read-only sandbox and fixed approval setting;
+Claude's option removes its empty tool list and fixed `dontAsk` permission mode.
+This permits the CLI's own tools to act with the server user's permissions.
+The default configuration does not add these options: Codex remains read-only
+and Claude runs without tools. Required JSON output and request/session controls
+remain configured by Clivoy. CLI tool activity is internal to the provider;
+it does not add API function-tool support. See [execution controls](../SECURITY.md).
+
 ## Gemini CLI
 
 Install the official CLI, then run it once to authenticate:
@@ -227,8 +249,19 @@ Restart after changing configuration. [Detailed HTTP integration](compatibility.
 
 ## Configuration reference
 
-CLI providers accept an optional executable `command`. Codex, Claude and Gemini
-also accept `work_dir`; otherwise each request uses a fresh temporary working
+CLI providers accept an optional `command` array containing an executable and
+literal arguments, such as `["/path with spaces/codex", "--yolo"]`. Arguments
+are never shell-expanded or split on spaces: use separate array entries for
+separate flags and values. The executable must be nonempty and not whitespace-only;
+all entries must be strings without NUL characters. Omit `command`, or set it to
+`[]` or `null`, to discover the executable automatically. Legacy executable-only
+strings are still accepted (including `""` for discovery), but strings containing
+flags are not split. New initialization writes arrays. Metadata discovery and
+`doctor` use only the executable; generation arguments are not passed to model
+listing. Clivoy adds its own protocol options, so avoid conflicting output,
+session or prompt flags.
+
+Codex, Claude and Gemini also accept `work_dir`; otherwise each request uses a fresh temporary working
 directory, removed after execution. Grok always uses a fresh working directory
 and rejects `work_dir` configuration. These paths and upstream URLs are set by
 the administrator, never by API callers.

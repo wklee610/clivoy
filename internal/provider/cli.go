@@ -18,24 +18,39 @@ import (
 
 type cliProvider struct {
 	kind, binary, workdir string
+	commandArgs           []string
 	tempDir               string
 	excludedEnv           []string
 }
 
 // NewCLI uses credentials already available to the installed CLI. An empty
 // workdir gives every request a fresh temporary working directory.
-func NewCLI(kind, binary, workdir string, excludedEnv ...string) (engine.Provider, error) {
-	return NewCLIWithTempDir(kind, binary, workdir, "", excludedEnv...)
+func NewCLI(kind string, command []string, workdir string, excludedEnv ...string) (engine.Provider, error) {
+	return NewCLIWithTempDir(kind, command, workdir, "", excludedEnv...)
 }
 
 // NewCLIWithTempDir keeps Clivoy-owned request directories and image attachments
 // in the chosen runtime directory. It does not relocate the CLI's credentials.
-func NewCLIWithTempDir(kind, binary, workdir, tempDir string, excludedEnv ...string) (engine.Provider, error) {
+func NewCLIWithTempDir(kind string, command []string, workdir, tempDir string, excludedEnv ...string) (engine.Provider, error) {
 	if kind != "codex" && kind != "claude" && kind != "gemini" && kind != "grok" {
 		return nil, fmt.Errorf("unsupported CLI provider %q", kind)
 	}
 	if kind == "grok" && workdir != "" {
 		return nil, errors.New("Grok CLI requires an isolated temporary working directory; omit workdir")
+	}
+	var binary string
+	var commandArgs []string
+	if len(command) > 0 {
+		if strings.TrimSpace(command[0]) == "" {
+			return nil, errors.New("CLI command executable must not be empty")
+		}
+		for _, arg := range command {
+			if strings.ContainsRune(arg, '\x00') {
+				return nil, errors.New("CLI command must not contain NUL bytes")
+			}
+		}
+		binary = command[0]
+		commandArgs = append([]string(nil), command[1:]...)
 	}
 	// Discover the CLI at request time so later installations and upgrades are
 	// picked up. Explicit relative paths stay rooted here.
@@ -62,7 +77,7 @@ func NewCLIWithTempDir(kind, binary, workdir, tempDir string, excludedEnv ...str
 			return nil, fmt.Errorf("cannot resolve CLI temporary directory")
 		}
 	}
-	return &cliProvider{kind: kind, binary: binary, workdir: workdir, tempDir: tempDir, excludedEnv: append([]string{"CLIVOY_API_KEY", "CLIVOY_HOME"}, excludedEnv...)}, nil
+	return &cliProvider{kind: kind, binary: binary, commandArgs: commandArgs, workdir: workdir, tempDir: tempDir, excludedEnv: append([]string{"CLIVOY_API_KEY", "CLIVOY_HOME"}, excludedEnv...)}, nil
 }
 
 func (p *cliProvider) environment() []string {
@@ -109,17 +124,37 @@ func (p *cliProvider) Validate(req engine.Request) error {
 	return nil
 }
 
+func (p *cliProvider) hasCommandFlag(flags ...string) bool {
+	for _, arg := range p.commandArgs {
+		for _, flag := range flags {
+			if arg == flag {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (p *cliProvider) args(req engine.Request) []string {
 	if p.kind == "grok" {
 		return p.grokArgs(req)
 	}
 	var args []string
 	if p.kind == "codex" {
-		args = []string{"exec", "--json", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "--ignore-user-config", "--ignore-rules", "--color", "never", "-c", `approval_policy="never"`, "-c", `web_search="disabled"`}
+		args = append([]string{"exec"}, p.commandArgs...)
+		args = append(args, "--json", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules", "--color", "never", "-c", `web_search="disabled"`)
+		if !p.hasCommandFlag("--yolo", "--dangerously-bypass-approvals-and-sandbox") {
+			args = append(args, "--sandbox", "read-only", "-c", `approval_policy="never"`)
+		}
 	} else if p.kind == "gemini" {
-		args = []string{"--output-format", "stream-json", "--approval-mode", "default", "--extensions", "none"}
+		args = append([]string(nil), p.commandArgs...)
+		args = append(args, "--output-format", "stream-json", "--approval-mode", "default", "--extensions", "none")
 	} else {
-		args = []string{"--print", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--tools", "", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--disable-slash-commands", "--no-session-persistence", "--permission-mode", "dontAsk", "--no-chrome", "--settings", `{"disableAllHooks":true}`}
+		args = append([]string(nil), p.commandArgs...)
+		args = append(args, "--print", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`, "--disable-slash-commands", "--no-session-persistence", "--no-chrome", "--settings", `{"disableAllHooks":true}`)
+		if !p.hasCommandFlag("--dangerously-skip-permissions") {
+			args = append(args, "--tools", "", "--permission-mode", "dontAsk")
+		}
 	}
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
@@ -287,6 +322,8 @@ type cliParser struct {
 	result engine.Result
 	done   bool
 	text   strings.Builder
+
+	claudeMessageStart int
 }
 
 func (p *cliParser) add(s string) error {
@@ -361,6 +398,9 @@ func (p *cliParser) line(line []byte) error {
 	}
 	switch event.Type {
 	case "stream_event":
+		if event.Event.Type == "message_start" {
+			p.claudeMessageStart = p.text.Len()
+		}
 		if event.Event.Type == "content_block_delta" && event.Event.Delta.Type == "text_delta" {
 			return p.add(event.Event.Delta.Text)
 		}
@@ -374,11 +414,14 @@ func (p *cliParser) line(line []byte) error {
 			}
 			return upstreamError("Claude CLI could not complete the request; check local CLI login, selected model, and configuration")
 		}
-		// A final result duplicates partial messages. Emit only a missing suffix.
-		if !strings.HasPrefix(event.Result, p.result.Text) {
+		// A tool loop can stream several assistant messages. The final result
+		// duplicates only the last message, so retain earlier messages and emit
+		// only the missing suffix of the current one.
+		currentMessage := p.result.Text[p.claudeMessageStart:]
+		if !strings.HasPrefix(event.Result, currentMessage) {
 			return upstreamError("Claude CLI final output did not match the streamed response")
 		}
-		if err := p.add(strings.TrimPrefix(event.Result, p.result.Text)); err != nil {
+		if err := p.add(strings.TrimPrefix(event.Result, currentMessage)); err != nil {
 			return err
 		}
 		p.done = true

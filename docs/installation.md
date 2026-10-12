@@ -96,7 +96,7 @@ system service or enable automatic startup after reboot.
 Existing configurations keep their saved `listen` address. To change it, edit
 `clivoy.json` and run `clivoy restart`, or set an explicit `--listen` override.
 When creating a configuration, `init` saves the absolute paths of detected CLIs
-in `providers.<name>.command`. First-run `start` and `serve` do the same through
+as one-element arrays in `providers.<name>.command`. First-run `start` and `serve` do the same through
 automatic initialization. Later runs reuse those paths; existing configurations
 are not rewritten automatically.
 
@@ -123,26 +123,28 @@ clivoy doctor
 test provider login, connectivity or model access. A missing CLI warning during
 first start does not prevent initialization; only the provider you call must work.
 
-When a provider's `command` is empty or omitted, Clivoy searches `PATH` and known
+When a provider's `command` is omitted, `[]` or `null`, Clivoy searches `PATH` and known
 installation locations, including supported macOS app bundles and Windows npm
 installations. If a CLI is missing during initialization, its `command` stays
 omitted so discovery can find it after installation. `doctor` and `models` only
 inspect configuration; they do not save newly discovered paths.
+Legacy executable strings, including `""` for automatic discovery, remain supported.
 
 To set a path manually, edit `providers.<name>.command` in
 `~/.clivoy/clivoy.json` (`%USERPROFILE%\.clivoy\clivoy.json` on Windows).
 Use the executable's absolute path. For example, set `providers.gemini` to:
 
 ```json
-{"type": "gemini", "command": "/absolute/path/to/gemini"}
+{"type": "gemini", "command": ["/absolute/path/to/gemini"]}
 ```
 
 Keep the rest of the configuration. Windows JSON paths escape backslashes, for example
-`"command": "C:\\path\\to\\grok.exe"`. An explicit `command` takes precedence
+`"command": ["C:\\path\\to\\grok.exe"]`. An explicit executable takes precedence
 and does not fall back to another installation on failure. If the executable
 moves, update `command` or clear it to resume automatic discovery. Run `clivoy doctor`
 to verify the path, then `clivoy restart` to apply it. See
-[CLI discovery](compatibility.md#cli-discovery-and-model-selection) for details.
+[CLI discovery](compatibility.md#cli-discovery-and-model-selection) for details and
+[CLI options](providers.md#codex-and-claude) to add arguments after the executable.
 
 ## Package installation
 

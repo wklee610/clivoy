@@ -13,14 +13,15 @@ import (
 // restore the entire toolset. Allow a known tool, then remove it and the two
 // always-on MCP meta-tools. See xai-org/grok-build's agent/tool_list.rs.
 func (p *cliProvider) grokArgs(req engine.Request) []string {
-	args := []string{
+	args := append([]string(nil), p.commandArgs...)
+	args = append(args,
 		"--no-auto-update", "--no-leader", "--output-format", "streaming-json",
 		"--tools", "read_file", "--disallowed-tools", "read_file,search_tool,use_tool",
 		"--permission-mode", "dontAsk", "--sandbox", "clivoy-read-only",
 		"--no-plan", "--no-subagents", "--no-memory", "--disable-web-search",
 		"--max-turns", "1", "--verbatim",
 		"--system-prompt-override", "Answer the supplied conversation. Do not use tools or access the local environment.",
-	}
+	)
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
 	}

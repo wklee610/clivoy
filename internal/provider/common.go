@@ -67,6 +67,10 @@ func validateMessages(req engine.Request, allowRemoteImages bool) error {
 }
 
 func cliPrompt(req engine.Request) string {
+	return cliPromptWithTools(req, false)
+}
+
+func cliPromptWithTools(req engine.Request, allowTools bool) string {
 	// Role boundaries are represented as a transcript; the CLIs do not expose
 	// an API with the same system/developer role hierarchy as Chat Completions.
 	type turn struct {
@@ -89,7 +93,11 @@ func cliPrompt(req engine.Request) string {
 		turns = append(turns, turn{m.Role, content.String()})
 	}
 	data, _ := json.Marshal(turns)
-	prompt := "Continue the following conversation. Respond to its last user message with only your answer. The JSON entries preserve the conversation's roles and order. Do not use tools or inspect the local environment.\n"
+	prompt := "Continue the following conversation. Respond to its last user message with only your answer. The JSON entries preserve the conversation's roles and order."
+	if !allowTools {
+		prompt += " Do not use tools or inspect the local environment."
+	}
+	prompt += "\n"
 	if imageIndex > 0 {
 		prompt += "Attached images are numbered in conversation order and correspond to the numbered markers in the transcript. Analyze the attached image content directly.\n"
 	}

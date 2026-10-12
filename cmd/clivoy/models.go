@@ -93,9 +93,9 @@ func modelChoicesWithDiscovery(c config.Config, refresh bool, discover cliModelD
 				ollamaBudget -= time.Since(started)
 			}
 		} else if refresh {
-			available, err = discover(ctx, p.Type, p.Command, excludedCLIEnvironment(c, p.Type)...)
+			available, err = discover(ctx, p.Type, p.Command.Executable(), excludedCLIEnvironment(c, p.Type)...)
 		} else {
-			available, err = modelcatalog.Discover(ctx, p.Type, p.Command)
+			available, err = modelcatalog.Discover(ctx, p.Type, p.Command.Executable())
 		}
 		cancel()
 		if err != nil {
