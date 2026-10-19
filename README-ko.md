@@ -12,6 +12,7 @@ Clivoy는 **Codex, Claude, Gemini, Grok, Ollama**를 하나의 로컬 API로 사
 기존 CLI 로그인을 그대로 사용하고, 내 Ollama 서버에 연결합니다.
 **xAI API**나 다른 호환 모델 서버도 연결할 수 있습니다.
 OpenAI 또는 Anthropic SDK에서 서버 주소와 모델 이름만 지정하면 됩니다.
+Markdown RAG를 설정하면 같은 API로 내 문서나 Obsidian 노트에 근거한 답변도 받을 수 있습니다.
 
 Clivoy 실행에는 GPU나 Python이 필요 없습니다. macOS, Linux, Windows에서
 실행하는 하나의 Go 프로그램입니다.
@@ -89,6 +90,7 @@ curl -sS http://127.0.0.1:9610/v1/chat/completions \
 
 새 설정에는 네 CLI 모델 이름과 로컬 Ollama 연결이 포함됩니다. 기존 설정을 사용 중이면
 [필요한 제공자 항목을 추가](docs/providers.md#existing-configurations)하세요.
+새 초기화에는 [Markdown 문서 질의용 `infra` 모델](#내-문서에-질문하기)도 포함됩니다.
 xAI API에 직접 연결하려면 [Grok API 설정](docs/providers.md#grok-xai-api)을 참고하세요.
 
 CLI의 `command`는 `["codex", "--yolo"]`,
@@ -103,6 +105,22 @@ CLI의 `command`는 `["codex", "--yolo"]`,
 
 소스 폴더나 릴리스 압축을 푼 폴더에서 [간단한 Python 예제](docs/usage.md#python-connectivity-test)를 `python3 scripts/test_clivoy.py`로 실행합니다.
 안내에 따라 `openai`를 설치하고 파일 안의 모델 이름을 바꾸면 됩니다.
+
+## 내 문서에 질문하기
+
+v1.1.0부터 새로 초기화하면 빈 `~/.clivoy/knowledge/default` 폴더와 Codex를
+사용하는 `infra` 모델이 만들어집니다. Windows의 폴더는
+`%USERPROFILE%\.clivoy\knowledge\default`입니다. Markdown 파일을 넣고 같은
+API와 키로 `model: "infra"`를 지정하면 됩니다. 관련 문서를 검색해 모델에 전달하고,
+답변 끝에 출처 목록을 붙입니다. 문서 변경은 기본 30초 간격으로 반영하며,
+관련 문서가 없으면 모델을 호출하지 않고 안내를 반환합니다.
+
+기존 설정은 바뀌지 않습니다. `knowledge_bases`에 Markdown 폴더나 Obsidian
+보관함을 추가하고 모델의 `knowledge`로 연결하세요. 다른 CLI나 HTTP 백엔드도
+선택할 수 있습니다. RAG 모델에는 별도의 CLI 실행 설정을 적용하므로 일반 모델의
+`--yolo` 같은 옵션은 전달되지 않습니다. 모든 서버 API 키는 등록된 모든 지식
+베이스에 접근할 수 있습니다. [설정·검색 API·제한 안내](docs/knowledge.md) ·
+[설정 예시](examples/knowledge.json).
 
 ## SDK에서 사용하기
 
@@ -146,6 +164,7 @@ Anthropic SDK는 같은 키와 `base_url="http://127.0.0.1:9610"`을 사용합�
 - OpenAI Chat Completions, 상태를 저장하지 않는 Responses, Anthropic Messages, SSE
 - 모든 제공자의 텍스트 대화, Codex·Claude·HTTP 비전 모델의 이미지 입력
 - 호환 HTTP 서버의 함수 도구 호출과 이미지 생성
+- 같은 API로 사용하는 Markdown RAG, 문서 검색과 출처 목록
 - 로컬 API 키, 요청 제한 시간, 크기가 제한된 요청 대기열
 
 CLI 연결은 대화 내용을 하나의 프롬프트로 변환합니다. API 도구 호출과 샘플링 설정은
@@ -160,5 +179,6 @@ CLI는 내 사용자 계정으로 실행되며 OS 수준으로 격리되지 않�
 
 - [Gemini, Grok, Ollama 연결](docs/providers.md)
 - [이미지 입력과 생성](docs/images.md)
+- [Markdown·Obsidian RAG](docs/knowledge.md)
 - [설정 예시](examples) · [패키지 배포](docs/distribution.md)
 - [기여 및 테스트 안내](CONTRIBUTING.md) · [Apache-2.0 라이선스](LICENSE)

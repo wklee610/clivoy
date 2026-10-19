@@ -38,6 +38,7 @@ type Options struct {
 	// NativeProviders permits <provider>/<native-model> selection for explicitly
 	// registered CLI and Ollama backends. Generic HTTP backends remain alias-only.
 	NativeProviders map[string]Model
+	KnowledgeBases  map[string]KnowledgeBase
 }
 
 type Server struct {
@@ -79,6 +80,10 @@ func New(o Options) (*Server, error) {
 		return nil, fmt.Errorf("native model providers: %w", err)
 	}
 	o.Models, o.NativeProviders = models, nativeProviders
+	o.KnowledgeBases, err = cloneKnowledgeBases(o.KnowledgeBases)
+	if err != nil {
+		return nil, err
+	}
 	return &Server{options: o, apiKeyHashes: keyHashes, slots: make(chan struct{}, o.MaxConcurrent), queue: make(chan struct{}, o.MaxQueue)}, nil
 }
 
@@ -172,6 +177,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch r.URL.Path {
+	case "/v1/search", "/v1/knowledge/status":
+		s.serveKnowledge(w, r)
+		return
 	case "/v1/models":
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", "GET")
@@ -244,11 +252,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { <-s.slots }()
+	backend := m.Provider
+	if preparer, ok := backend.(engine.RequestPreparer); ok {
+		backend, native, err = preparer.Prepare(ctx, native)
+		if err != nil {
+			s.writeError(w, protocol, err)
+			return
+		}
+	}
 	if p.Stream {
-		s.stream(ctx, w, p, m.Provider, native)
+		s.stream(ctx, w, p, backend, native)
 		return
 	}
-	result, err := m.Provider.Generate(ctx, native, nil)
+	result, err := backend.Generate(ctx, native, nil)
 	if err == nil {
 		err = ctx.Err()
 	}

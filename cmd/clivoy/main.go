@@ -136,6 +136,10 @@ func initConfig(args []string, out, errOut io.Writer) error {
 	keyPath := filepath.Join(filepath.Dir(*path), "auth.json")
 	c := config.Default()
 	c.AuthFile = filepath.Base(keyPath)
+	knowledgeBase := config.DefaultKnowledgeBase()
+	knowledgeBase.Root = "knowledge/default"
+	c.KnowledgeBases = map[string]config.KnowledgeBase{"default": knowledgeBase}
+	c.Models["infra"] = config.Model{Provider: "codex", Knowledge: "default", Capabilities: []string{"chat"}}
 
 	file, err := os.OpenFile(*path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
@@ -184,6 +188,15 @@ func initConfig(args []string, out, errOut io.Writer) error {
 	if err := keyFile.Close(); err != nil {
 		return err
 	}
+	rollbackKnowledge, err := createInitialKnowledgeDirectories(filepath.Dir(*path))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if !complete {
+			rollbackKnowledge()
+		}
+	}()
 	setDiscoveredCLICommands(&c, clidiscovery.Resolve)
 	e := json.NewEncoder(file)
 	e.SetIndent("", "  ")
@@ -197,6 +210,7 @@ func initConfig(args []string, out, errOut io.Writer) error {
 	}
 	complete = true
 	fmt.Fprintf(out, "Created %s and auth file %s.\n", *path, keyPath)
+	fmt.Fprintf(out, "Add Markdown files to %s to use the infra knowledge model.\n", filepath.Join(filepath.Dir(*path), "knowledge", "default"))
 	reportMissingCLIs(c, *path, out, clidiscovery.Resolve)
 	if useDefault {
 		fmt.Fprintln(out, "Run clivoy start.\nTo retrieve the client token, run clivoy auth.")
@@ -340,6 +354,13 @@ func configuredRuntime(command string, args []string, out, errOut io.Writer, man
 		out = io.MultiWriter(out, logWriter)
 		errOut = io.MultiWriter(errOut, logWriter)
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), shutdownSignals()...)
+	defer stop()
+	knowledgeState, err := startKnowledge(ctx, c, errOut)
+	if err != nil {
+		return err
+	}
+	defer knowledgeState.close()
 	providers := make(map[string]engine.Provider, len(c.Providers))
 	for name, p := range c.Providers {
 		var backend engine.Provider
@@ -369,9 +390,9 @@ func configuredRuntime(command string, args []string, out, errOut io.Writer, man
 	for _, warning := range warnings {
 		fmt.Fprintln(errOut, warning)
 	}
-	models := make(map[string]server.Model, len(knownModels))
-	for alias, m := range knownModels {
-		models[alias] = server.Model{Provider: providers[m.Provider], UpstreamModel: m.Model, Owner: m.Provider, Capabilities: m.Capabilities}
+	models, err := buildKnowledgeModels(c, knownModels, providers, knowledgeState.bases)
+	if err != nil {
+		return err
 	}
 	nativeProviders := make(map[string]server.Model)
 	for name, p := range c.Providers {
@@ -384,12 +405,10 @@ func configuredRuntime(command string, args []string, out, errOut io.Writer, man
 		}
 	}
 	timeout, _ := time.ParseDuration(c.RequestTimeout)
-	handler, err := server.New(server.Options{APIKeys: keys, RequestTimeout: timeout, MaxConcurrent: c.MaxConcurrent, MaxQueue: c.MaxQueue, MaxBodyBytes: c.MaxBodyBytes, Models: models, NativeProviders: nativeProviders})
+	handler, err := server.New(server.Options{APIKeys: keys, RequestTimeout: timeout, MaxConcurrent: c.MaxConcurrent, MaxQueue: c.MaxQueue, MaxBodyBytes: c.MaxBodyBytes, Models: models, NativeProviders: nativeProviders, KnowledgeBases: knowledgeState.bases})
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), shutdownSignals()...)
-	defer stop()
 	if managed != nil {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()

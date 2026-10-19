@@ -20,6 +20,9 @@ login for you. Start it under the same OS user that logged in to the CLI.
 Image support also depends on the selected upstream model.
 New configurations also include an [Ollama connection](#ollama) at
 `http://127.0.0.1:11434/v1`; choose a model installed on that server.
+New initialization also creates an `infra` alias backed by Codex and an empty
+Markdown directory. See [knowledge setup](knowledge.md) to add documents or
+select another backend for that alias.
 Run `clivoy models` to query the installed CLIs and Ollama. Its `SOURCE` column
 separates their responses from unverified configuration aliases. See
 [model selection](usage.md#choose-a-model) for failures and catalog limits.
@@ -57,6 +60,9 @@ The default configuration does not add these options: Codex remains read-only
 and Claude runs without tools. Required JSON output and request/session controls
 remain configured by Clivoy. CLI tool activity is internal to the provider;
 it does not add API function-tool support. See [execution controls](../SECURITY.md).
+Aliases with a `knowledge` setting use separate RAG execution controls: they
+reuse only the configured executable, ignoring these extra arguments and
+`work_dir`. Ordinary aliases keep their configured behavior.
 
 ## Gemini CLI
 
@@ -249,6 +255,11 @@ Restart after changing configuration. [Detailed HTTP integration](compatibility.
 
 ## Configuration reference
 
+To ground a model's answers in local documents, define a named `knowledge_bases`
+entry and set the model's `knowledge` to that name. RAG aliases support text chat
+only, across the existing conversation endpoints. See [Markdown RAG](knowledge.md)
+for configuration, source lists, search and refresh behavior.
+
 CLI providers accept an optional `command` array containing an executable and
 literal arguments, such as `["/path with spaces/codex", "--yolo"]`. Arguments
 are never shell-expanded or split on spaces: use separate array entries for
@@ -259,7 +270,8 @@ strings are still accepted (including `""` for discovery), but strings containin
 flags are not split. New initialization writes arrays. Metadata discovery and
 `doctor` use only the executable; generation arguments are not passed to model
 listing. Clivoy adds its own protocol options, so avoid conflicting output,
-session or prompt flags.
+session or prompt flags. RAG aliases also use only the executable and apply their
+own generation controls.
 
 Codex, Claude and Gemini also accept `work_dir`; otherwise each request uses a fresh temporary working
 directory, removed after execution. Grok always uses a fresh working directory
