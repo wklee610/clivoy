@@ -24,6 +24,8 @@ for example, use an alias backed by Ollama.
 | Capability | API endpoint | Scope |
 | --- | --- | --- |
 | Model discovery | `GET /v1/models` | Configured aliases, local CLI metadata and discovered Ollama models, with a Clivoy `capabilities` extension |
+| Document search | `POST /v1/search` | Authenticated keyword search of a configured Markdown knowledge base; no generation call |
+| Knowledge status | `GET /v1/knowledge/status` | Authenticated index readiness, refresh state and document counts |
 | OpenAI Chat Completions | `POST /v1/chat/completions` | Text and image input, JSON and SSE, one completion |
 | OpenAI Responses | `POST /v1/responses` | Stateless text, image input and function calls, JSON and typed SSE |
 | Anthropic Messages | `POST /v1/messages` | Text, image input and tool blocks, JSON and named SSE |
@@ -70,6 +72,27 @@ Grok Build [headless interface](https://docs.x.ai/build/cli/headless-scripting).
 Tests use fixture processes rather than
 authenticated live CLI calls. Older versions may lack required flags. See the
 [provider setup guide](providers.md) for installation and authentication.
+
+## Markdown RAG compatibility
+
+Since v1.1.0, an explicit model alias can reference a configured `knowledge` base.
+That alias retrieves local Markdown excerpts before generation and works with
+all three conversation endpoints, in JSON and SSE modes. Ordinary aliases and
+native `<provider>/<model>` requests keep their existing behavior. RAG accepts
+text only; images, API tool calling, tool history and structured JSON output are
+unsupported, including when the underlying HTTP provider supports them.
+
+Sources are appended to answer text as a numbered list. They identify documents
+included in the model context, not verified claim-by-claim citations. There is no
+additional `sources` field or vendor-native citation annotation. The server emits
+the same footer in streaming and non-streaming answers; upstream usage excludes
+that footer. If retrieval finds nothing relevant, Clivoy returns a no-match
+answer without invoking a generation backend.
+
+`POST /v1/search` and `GET /v1/knowledge/status` are Clivoy-specific authenticated
+extensions, not OpenAI or Anthropic endpoints. See [knowledge setup](knowledge.md)
+for their request formats, refresh behavior, token estimates and execution
+controls. Existing configurations are not automatically given knowledge bases.
 
 ## CLI discovery and model selection
 

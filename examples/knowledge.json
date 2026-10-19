@@ -1,0 +1,24 @@
+{
+  "listen": "127.0.0.1:9610",
+  "api_key_env": "CLIVOY_API_KEY",
+  "log_file": "-",
+  "request_timeout": "5m",
+  "max_concurrent": 8,
+  "max_queue": 32,
+  "max_body_bytes": 33554432,
+  "providers": {
+    "codex": {"type": "codex", "command": ["codex"]}
+  },
+  "knowledge_bases": {
+    "default": {
+      "root": "knowledge",
+      "top_k": 10,
+      "max_context_tokens": 6000,
+      "refresh_interval": "30s"
+    }
+  },
+  "models": {
+    "codex": {"provider": "codex", "capabilities": ["chat", "vision"]},
+    "infra": {"provider": "codex", "knowledge": "default", "capabilities": ["chat"]}
+  }
+}

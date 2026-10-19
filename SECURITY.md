@@ -4,7 +4,8 @@ Clivoy is intended for trusted callers of a self-hosted gateway. It accepts
 multiple server API keys with identical permissions; it does not provide per-user
 authorization, quotas, or tenant isolation. Every holder of an accepted key can
 call every configured model and select native model IDs through configured CLI
-and Ollama providers. Configured aliases and the model catalog are
+and Ollama providers. They can also search every configured knowledge base and
+call its RAG aliases. Configured aliases and the model catalog are
 not model access allowlists; the provider's permissions and usage limits apply.
 
 `clivoy init` generates a local token with the prefix `sk-clivoy-` followed by
@@ -135,7 +136,7 @@ no tools, strict empty MCP configuration, no session persistence, no slash comma
 no browser integration, and hooks disabled where CLI settings allow it.
 Enterprise-managed hooks can override user hook settings.
 
-The administrator can explicitly opt into less restricted execution with
+For ordinary models, the administrator can explicitly opt into less restricted execution with
 `"command": ["codex", "--yolo"]` (or
 `--dangerously-bypass-approvals-and-sandbox`) and
 `"command": ["claude", "--dangerously-skip-permissions"]`. For Codex, Clivoy
@@ -186,6 +187,45 @@ Do not give untrusted callers access to a CLI running under a sensitive account.
 Use a dedicated account or container/VM with restricted mounts when stronger
 isolation is required. Treat a configured `work_dir` as an explicit grant of
 context to the CLI. Read-only execution is not a confidentiality boundary.
+
+Markdown RAG roots are chosen by the administrator, relative to the configuration
+file or as absolute/home-relative paths. Requests select a configured knowledge
+base or model alias; they cannot select an arbitrary filesystem root. New
+initialization creates only a dedicated `knowledge/default` directory beside the
+configuration. Existing configurations and document contents are not rewritten.
+The index reads Markdown without modifying it, skips hidden paths, symlinks,
+non-regular files, invalid UTF-8 and oversized documents, and bounds aggregate
+resource use. These rules do not detect or redact sensitive content in a valid
+document. Every accepted key grants access to all knowledge bases, including
+excerpts returned directly by `/v1/search`.
+
+For RAG aliases, Clivoy reuses only a CLI provider's configured executable and
+native authentication. Extra `command` arguments, including `--yolo` and
+`--dangerously-skip-permissions`, and `work_dir` are not inherited. Each request
+uses a temporary working directory. Codex retains read-only execution and
+disables shell, app, plugin, browser, code-mode and related integrations; Claude
+uses an empty tool list and no user/project settings sources. Gemini and Grok
+use their restricted integration settings. Ordinary models retain their
+configured execution options. These are CLI controls, not a new OS isolation
+boundary; a dedicated account or container remains necessary for stronger
+separation from other local files.
+
+Retrieved text and metadata are explicitly treated as untrusted document data.
+The model is instructed to answer from them without following embedded commands,
+but this instruction does not guarantee resistance to prompt injection or answer
+accuracy. Search excerpts, document titles, relative paths and source links are
+visible to API callers. Relevant excerpts and metadata are also sent to the
+selected provider, including remote HTTP servers or Ollama at its configured
+address, subject to that provider's data policies. RAG rejects API tool calling
+and structured output; its source list is plain answer text, not a validated
+statement-level citation record.
+
+An invalid root or failed initial index prevents startup. A failed later refresh
+retains the previous complete snapshot and reports `refresh_failed` through
+`/v1/knowledge/status`. Removed or changed documents may therefore remain
+searchable until a refresh succeeds. Confirm a successful refresh or stop the
+service when removing access to a document. See [knowledge limits and
+configuration](docs/knowledge.md).
 
 Timeouts and disconnections cancel work. Unix cancellation targets the process
 group; Windows attempts process-tree termination. The server bounds request

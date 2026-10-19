@@ -12,6 +12,7 @@ Clivoy lets your apps use **Codex, Claude, Gemini, Grok and Ollama** through one
 local API. It uses your existing CLI logins and connects to your Ollama server.
 You can also connect the **xAI API** or other compatible model servers.
 Use an OpenAI or Anthropic SDK, change the base URL, and choose a model.
+Optional Markdown RAG lets the same API answer from your documents or Obsidian notes.
 
 No GPU or Python is needed to run Clivoy. It is a single Go executable for
 macOS, Linux and Windows.
@@ -90,6 +91,7 @@ Replace `codex` with `claude`, `gemini` or `grok` for another installed CLI.
 [PowerShell request example](docs/installation.md#windows-powershell).
 
 New configurations include all four CLI aliases and a local Ollama connection.
+They also include an `infra` model for [answers from Markdown documents](#ask-your-documents).
 For an existing configuration, [add the providers you need](docs/providers.md#existing-configurations).
 For a direct xAI API connection, use the optional [Grok API setup](docs/providers.md#grok-xai-api).
 
@@ -104,6 +106,22 @@ You can substitute another model already installed in Ollama.
 
 From a source checkout or release archive, try the [short Python example](docs/usage.md#python-connectivity-test): `python3 scripts/test_clivoy.py`.
 Install `openai` and choose the model in the file as described in the guide.
+
+## Ask your documents
+
+Starting with v1.1.0, new initialization creates an empty
+`~/.clivoy/knowledge/default` directory and an `infra` model backed by Codex.
+Add Markdown files, then use `model: "infra"` with the same API and gateway key.
+Clivoy searches the files, passes relevant excerpts to the model and appends
+their sources to the answer. Document changes refresh every 30 seconds by default.
+An empty search returns a no-match answer without calling the model.
+
+Existing configurations stay unchanged. You can explicitly add a knowledge base
+pointing to a Markdown folder or Obsidian vault and choose another CLI or HTTP
+backend. RAG aliases use separate CLI execution settings; an ordinary model's
+`--yolo` option does not carry over. All gateway keys can access all configured
+knowledge bases. [Setup, search API and limits](docs/knowledge.md) ·
+[Configuration example](examples/knowledge.json).
 
 ## Use your SDK
 
@@ -147,6 +165,7 @@ after reboot. [Full command and configuration guide](docs/usage.md).
 - OpenAI Chat Completions, stateless Responses, Anthropic Messages and SSE.
 - Text chat with every provider; image input with Codex, Claude and HTTP vision models.
 - Function tools through compatible HTTP backends; image generation through an HTTP image backend.
+- Optional Markdown RAG, document search and source lists through the same API.
 - Local API keys, request timeouts and a bounded request queue.
 
 CLI requests turn conversation history into a prompt. CLI adapters do not support
@@ -162,5 +181,6 @@ callers; CLI execution uses your account and is not an OS isolation boundary.
 
 - [Provider setup: Gemini, Grok and Ollama](docs/providers.md)
 - [Image input and generation](docs/images.md)
+- [Markdown and Obsidian RAG](docs/knowledge.md)
 - [Configuration examples](examples) · [Release packaging](docs/distribution.md)
 - [Contributing and tests](CONTRIBUTING.md) · [Apache-2.0 license](LICENSE)

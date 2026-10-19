@@ -42,6 +42,7 @@ func (p Provider) CLICapabilities() []string {
 type Model struct {
 	Provider     string   `json:"provider"`
 	Model        string   `json:"model,omitempty"`
+	Knowledge    string   `json:"knowledge,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
 }
 
@@ -69,17 +70,18 @@ func (m *Model) UnmarshalJSON(data []byte) error {
 }
 
 type Config struct {
-	Listen         string              `json:"listen"`
-	APIKeyEnv      string              `json:"api_key_env"`
-	AuthFile       string              `json:"auth_file,omitempty"`
-	APIKeyFile     string              `json:"api_key_file,omitempty"`
-	LogFile        string              `json:"log_file,omitempty"`
-	RequestTimeout string              `json:"request_timeout"`
-	MaxConcurrent  int                 `json:"max_concurrent"`
-	MaxQueue       int                 `json:"max_queue"`
-	MaxBodyBytes   int64               `json:"max_body_bytes"`
-	Providers      map[string]Provider `json:"providers"`
-	Models         map[string]Model    `json:"models"`
+	Listen         string                   `json:"listen"`
+	APIKeyEnv      string                   `json:"api_key_env"`
+	AuthFile       string                   `json:"auth_file,omitempty"`
+	APIKeyFile     string                   `json:"api_key_file,omitempty"`
+	LogFile        string                   `json:"log_file,omitempty"`
+	RequestTimeout string                   `json:"request_timeout"`
+	MaxConcurrent  int                      `json:"max_concurrent"`
+	MaxQueue       int                      `json:"max_queue"`
+	MaxBodyBytes   int64                    `json:"max_body_bytes"`
+	Providers      map[string]Provider      `json:"providers"`
+	Models         map[string]Model         `json:"models"`
+	KnowledgeBases map[string]KnowledgeBase `json:"knowledge_bases,omitempty"`
 	configDir      string
 }
 
@@ -124,7 +126,7 @@ func Load(path string) (Config, error) {
 	}
 	defer f.Close()
 	// Replace maps rather than merging the default providers into an explicit config.
-	c.Providers, c.Models = nil, nil
+	c.Providers, c.Models, c.KnowledgeBases = nil, nil, nil
 	d := json.NewDecoder(io.LimitReader(f, 1<<20))
 	d.DisallowUnknownFields()
 	if err := d.Decode(&c); err != nil {
@@ -197,6 +199,14 @@ func (c Config) Validate() error {
 	if len(c.Providers) == 0 {
 		return fmt.Errorf("providers must not be empty")
 	}
+	for name, base := range c.KnowledgeBases {
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("knowledge base names must not be empty")
+		}
+		if err := base.validate(); err != nil {
+			return fmt.Errorf("knowledge base %q: %w", name, err)
+		}
+	}
 	hasNativeModels := false
 	for _, p := range c.Providers {
 		hasNativeModels = hasNativeModels || p.SupportsNativeModels()
@@ -237,6 +247,14 @@ func (c Config) Validate() error {
 		p, ok := c.Providers[m.Provider]
 		if !ok {
 			return fmt.Errorf("model %q references an unknown provider", name)
+		}
+		if m.Knowledge != "" {
+			if _, ok := c.KnowledgeBases[m.Knowledge]; !ok {
+				return fmt.Errorf("model %q references an unknown knowledge base", name)
+			}
+			if m.Capabilities != nil && (len(m.Capabilities) != 1 || m.Capabilities[0] != "chat") {
+				return fmt.Errorf("model %q: knowledge models support text chat only", name)
+			}
 		}
 		if (p.Type == "openai" || p.Type == "ollama") && strings.TrimSpace(m.Model) == "" {
 			return fmt.Errorf("model %q requires an upstream model", name)

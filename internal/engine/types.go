@@ -81,6 +81,12 @@ type Provider interface {
 	Generate(context.Context, Request, func(Delta) error) (Result, error)
 }
 
+// RequestPreparer performs fallible preprocessing before a frontend opens a
+// stream. The returned provider and request belong to this one request only.
+type RequestPreparer interface {
+	Prepare(context.Context, Request) (Provider, Request, error)
+}
+
 // Error is safe to return to API clients; raw process stderr and credentials are not.
 type Error struct {
 	Status  int

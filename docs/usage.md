@@ -114,6 +114,7 @@ Clivoy keeps its default state together under your home directory:
 | Configuration | `~/.clivoy/clivoy.json` |
 | Server API keys | `~/.clivoy/auth.json` |
 | Runtime log | `~/.clivoy/logs/clivoy.log` |
+| Markdown documents created by new initialization | `~/.clivoy/knowledge/default/` |
 | Managed daemon state and private control token | `~/.clivoy/daemon.json` |
 | Daemon coordination locks | `~/.clivoy/daemon.lock`, `~/.clivoy/daemon-command.lock` |
 
@@ -162,6 +163,13 @@ an existing configuration and never initializes it automatically; `init --output
 creates a configuration and adjacent `auth.json` at your chosen path. Relative flag
 paths are resolved from the current directory. `auth_file` stays relative to
 its configuration's directory.
+
+New initialization adds a `default` knowledge base rooted at `knowledge/default`
+beside the configuration, and a text-only `infra` model backed by Codex. The
+document directory starts empty. Existing configurations are not changed; add
+`knowledge_bases` and a model's `knowledge` explicitly to enable retrieval.
+Document edits refresh automatically, while configuration edits require a
+restart. [Markdown/Obsidian setup and search API](knowledge.md).
 
 New initialization also saves detected CLI absolute paths as one-element arrays in
 `providers.<name>.command` for later runs. Add optional CLI arguments as separate

@@ -31,6 +31,12 @@ TEXT = "Hello from Clivoy 🌍."
 MODEL = "test-model"
 VISION_MODEL = "vision-model"
 IMAGE_MODEL = "image-model"
+KNOWLEDGE_MODEL = "knowledge-model"
+KNOWLEDGE_QUERY = "What is the backup procedure?"
+KNOWLEDGE_USER = {"role": "user", "content": KNOWLEDGE_QUERY}
+KNOWLEDGE_TITLE = "Backup handbook"
+KNOWLEDGE_URL = "https://example.invalid/handbook/backup"
+KNOWLEDGE_TEXT = "Backup procedure: run the synthetic backup job every night."
 # A 1x1 PNG fixture; no image model is invoked by these tests.
 PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 PNG_BYTES = base64.b64decode(PNG_BASE64)
@@ -199,9 +205,11 @@ class SDKCompatibility(unittest.TestCase):
     def test_models(self):
         models = self.oai.models.list()
         self.assertEqual([(m.id, m.owned_by) for m in models.data],
-                         [(IMAGE_MODEL, "test"), (MODEL, "test"), (VISION_MODEL, "test")])
+                         [(IMAGE_MODEL, "test"), (KNOWLEDGE_MODEL, "test"),
+                          (MODEL, "test"), (VISION_MODEL, "test")])
         self.assertEqual({m.id: m.model_dump()["capabilities"] for m in models.data}, {
             MODEL: ["chat"], VISION_MODEL: ["chat", "vision"], IMAGE_MODEL: ["image_generation"],
+            KNOWLEDGE_MODEL: ["chat"],
         })
 
     def test_chat(self):
@@ -210,6 +218,124 @@ class SDKCompatibility(unittest.TestCase):
         self.assertEqual(result.choices[0].message.content, TEXT)
         self.assertEqual(result.choices[0].finish_reason, "stop")
         self.assertEqual(result.usage.total_tokens, 11)
+
+    def assert_knowledge_answer(self, text):
+        footer = f"\n\nSources:\n- [1] [{KNOWLEDGE_TITLE}]({KNOWLEDGE_URL})"
+        self.assertEqual(text, TEXT + footer)
+        payload = self.upstream.requests[-1]
+        self.assertEqual(payload["model"], "upstream-model")
+        self.assertEqual(payload["messages"][-1], KNOWLEDGE_USER)
+        context = payload["messages"][0]
+        self.assertEqual(context["role"], "system")
+        self.assertIn(KNOWLEDGE_TEXT, context["content"])
+        self.assertIn(KNOWLEDGE_URL, context["content"])
+        self.assertIn("backup.md", context["content"])
+        self.assertNotIn("tools", payload)
+
+    def test_knowledge_chat(self):
+        before = len(self.upstream.requests)
+        result = self.oai.chat.completions.create(model=KNOWLEDGE_MODEL, messages=[KNOWLEDGE_USER])
+        self.assertEqual(len(self.upstream.requests), before + 1)
+        self.assertEqual(result.model, KNOWLEDGE_MODEL)
+        self.assertEqual(result.choices[0].finish_reason, "stop")
+        self.assertEqual(result.usage.total_tokens, 11)
+        self.assert_knowledge_answer(result.choices[0].message.content)
+
+    def test_knowledge_chat_stream(self):
+        with self.oai.chat.completions.create(
+            model=KNOWLEDGE_MODEL, messages=[KNOWLEDGE_USER], stream=True,
+            stream_options={"include_usage": True},
+        ) as stream:
+            chunks = list(stream)
+        text = "".join(c.choices[0].delta.content or "" for c in chunks if c.choices)
+        self.assert_knowledge_answer(text)
+        self.assertTrue(all(c.model == KNOWLEDGE_MODEL for c in chunks))
+        footer_index = next(i for i, c in enumerate(chunks)
+                            if c.choices and "Sources:" in (c.choices[0].delta.content or ""))
+        finish_index = next(i for i, c in enumerate(chunks)
+                            if c.choices and c.choices[0].finish_reason is not None)
+        self.assertLess(footer_index, finish_index)
+        self.assertEqual(chunks[finish_index].choices[0].finish_reason, "stop")
+        self.assertEqual(chunks[-1].usage.total_tokens, 11)
+
+    def test_knowledge_responses(self):
+        result = self.oai.responses.create(model=KNOWLEDGE_MODEL, input=KNOWLEDGE_QUERY, store=False)
+        self.assertEqual(result.model, KNOWLEDGE_MODEL)
+        self.assertEqual(result.status, "completed")
+        self.assert_knowledge_answer(result.output_text)
+
+    def test_knowledge_responses_stream(self):
+        with self.oai.responses.stream(model=KNOWLEDGE_MODEL, input=KNOWLEDGE_QUERY, store=False) as stream:
+            deltas = [event.delta for event in stream if event.type == "response.output_text.delta"]
+            result = stream.get_final_response()
+        self.assertEqual(result.model, KNOWLEDGE_MODEL)
+        self.assertEqual(result.status, "completed")
+        self.assertEqual("".join(deltas), result.output_text)
+        self.assert_knowledge_answer(result.output_text)
+
+    def test_knowledge_anthropic(self):
+        result = self.claude.messages.create(model=KNOWLEDGE_MODEL, max_tokens=128, messages=[KNOWLEDGE_USER])
+        self.assertEqual(result.model, KNOWLEDGE_MODEL)
+        self.assertEqual(result.stop_reason, "end_turn")
+        self.assert_knowledge_answer(result.content[0].text)
+
+    def test_knowledge_anthropic_stream(self):
+        with self.claude.messages.stream(model=KNOWLEDGE_MODEL, max_tokens=128, messages=[KNOWLEDGE_USER]) as stream:
+            text = "".join(stream.text_stream)
+            result = stream.get_final_message()
+        self.assertEqual(result.model, KNOWLEDGE_MODEL)
+        self.assertEqual(result.stop_reason, "end_turn")
+        self.assertEqual(text, result.content[0].text)
+        self.assert_knowledge_answer(text)
+
+    def test_knowledge_no_match_skips_upstream(self):
+        before = len(self.upstream.requests)
+        result = self.oai.chat.completions.create(
+            model=KNOWLEDGE_MODEL, messages=[{"role": "user", "content": "quasarxyz"}],
+        )
+        self.assertEqual(result.model, KNOWLEDGE_MODEL)
+        self.assertIn("No relevant documents", result.choices[0].message.content)
+        self.assertNotIn("Sources:", result.choices[0].message.content)
+        self.assertEqual(len(self.upstream.requests), before)
+
+    def test_knowledge_search_and_status(self):
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+        def request(path, body=None, token=TOKEN):
+            data = None if body is None else json.dumps(body).encode()
+            req = urllib.request.Request(self.base_url + path, data=data,
+                                         headers={"Authorization": f"Bearer {token}",
+                                                  "Content-Type": "application/json"})
+            with opener.open(req, timeout=10) as response:
+                self.assertEqual(response.status, 200)
+                return json.load(response)
+
+        before = len(self.upstream.requests)
+        for name in (None, "default"):
+            body = {"query": KNOWLEDGE_QUERY, "limit": 5}
+            if name is not None:
+                body["knowledge"] = name
+            result = request("/v1/search", body)
+            self.assertEqual(result["knowledge"], "default")
+            self.assertEqual(len(result["data"]), 1)
+            self.assertEqual(result["data"][0]["path"], "backup.md")
+            self.assertIn(KNOWLEDGE_TEXT, result["data"][0]["text"])
+        status = request("/v1/knowledge/status")
+        self.assertEqual(len(status["data"]), 1)
+        base = status["data"][0]
+        self.assertEqual(base["id"], "default")
+        self.assertTrue(base["ready"])
+        self.assertFalse(base["refresh_failed"])
+        self.assertEqual(base["documents"], 1)
+        self.assertEqual(base["chunks"], 1)
+        self.assertEqual(base["refresh_interval"], "30s")
+        self.assertTrue(base["updated_at"])
+        for path, body in (("/v1/search", {"query": KNOWLEDGE_QUERY}), ("/v1/knowledge/status", None)):
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                request(path, body, token="wrong-token")
+            self.assertEqual(error.exception.code, 401)
+            error.exception.close()
+        self.assertEqual(len(self.upstream.requests), before)
 
     def assert_image_order(self):
         parts = self.upstream.requests[-1]["messages"][-1]["content"]
@@ -651,15 +777,24 @@ def main():
         with tempfile.TemporaryDirectory(prefix="clivoy-sdk-") as directory:
             directory = Path(directory)
             port = available_port()
+            knowledge = directory / "knowledge"
+            knowledge.mkdir()
+            (knowledge / "backup.md").write_text(
+                f"{KNOWLEDGE_URL}\n\n# {KNOWLEDGE_TITLE}\n\n{KNOWLEDGE_TEXT}\n", encoding="utf-8",
+            )
             config = {
                 "listen": f"127.0.0.1:{port}", "api_key_env": "CLIVOY_SDK_TEST_KEY",
                 "request_timeout": "15s", "max_concurrent": 4, "max_queue": 8, "max_body_bytes": 1048576,
                 "providers": {"test": {"type": "openai", "base_url": f"http://127.0.0.1:{upstream.server_port}/v1",
                                        "api_key_env": "CLIVOY_SDK_UPSTREAM_KEY"}},
+                "knowledge_bases": {"default": {"root": "knowledge", "top_k": 10,
+                                                 "max_context_tokens": 6000, "refresh_interval": "30s"}},
                 "models": {
                     MODEL: {"provider": "test", "model": "upstream-model"},
                     VISION_MODEL: {"provider": "test", "model": "upstream-model", "capabilities": ["chat", "vision"]},
                     IMAGE_MODEL: {"provider": "test", "model": "upstream-image", "capabilities": ["image_generation"]},
+                    KNOWLEDGE_MODEL: {"provider": "test", "model": "upstream-model",
+                                      "knowledge": "default", "capabilities": ["chat"]},
                 },
             }
             path = directory / "config.json"

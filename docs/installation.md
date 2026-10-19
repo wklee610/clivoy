@@ -108,6 +108,12 @@ The default state directory is `~/.clivoy` on macOS/Linux or
 | `clivoy.json` | Providers, model aliases and server settings |
 | `auth.json` | Local gateway keys |
 | `logs/clivoy.log` | Runtime diagnostics |
+| `knowledge/default/` | Empty Markdown directory created by new initialization |
+
+New initialization also adds a Codex-backed `infra` model that answers from this
+directory. Existing configurations stay unchanged when upgrading. See
+[Markdown and Obsidian RAG](knowledge.md) to add documents, use another directory
+or enable the feature in an existing configuration.
 
 Run as your normal user so Clivoy can use that user's CLI login. `clivoy auth`
 prints the first accepted gateway key; it does not log in to an AI provider.
