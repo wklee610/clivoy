@@ -114,7 +114,13 @@ Starting with v1.1.0, new initialization creates an empty
 Add Markdown files, then use `model: "infra"` with the same API and gateway key.
 Clivoy searches the files, passes relevant excerpts to the model and appends
 their sources to the answer. Document changes refresh every 30 seconds by default.
-An empty search returns a no-match answer without calling the model.
+By default, an empty search returns a no-match answer without calling the model.
+
+In v1.2.0, set `knowledge_fallback: "model"` on a RAG model alias to let its
+configured backend answer from general knowledge when search returns no matches.
+The answer starts with a notice and has no document source footer. The default
+is `"none"`; search errors do not trigger fallback. The same text-only and CLI
+execution restrictions apply to both retrieved and fallback answers.
 
 Existing configurations stay unchanged. You can explicitly add a knowledge base
 pointing to a Markdown folder or Obsidian vault and choose another CLI or HTTP

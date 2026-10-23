@@ -143,3 +143,65 @@ func TestResolveKnowledgeRoot(t *testing.T) {
 		t.Fatalf("resolving a root created document directories: %v", err)
 	}
 }
+
+func TestKnowledgeFallbackConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		name, fields, want, wantError string
+	}{
+		{"omitted", `"knowledge":"notes"`, "", ""},
+		{"disabled", `"knowledge":"notes","knowledge_fallback":"none"`, "none", ""},
+		{"enabled", `"knowledge":"notes","knowledge_fallback":"model"`, "model", ""},
+		{"case insensitive key", `"knowledge":"notes","KNOWLEDGE_FALLBACK":"model"`, "model", ""},
+		{"unknown value", `"knowledge":"notes","knowledge_fallback":"retry"`, "", "knowledge_fallback"},
+		{"uppercase value", `"knowledge":"notes","knowledge_fallback":"MODEL"`, "", "knowledge_fallback"},
+		{"blank", `"knowledge":"notes","knowledge_fallback":" "`, "", "knowledge_fallback"},
+		{"empty", `"knowledge":"notes","knowledge_fallback":""`, "", "knowledge_fallback"},
+		{"null", `"knowledge":"notes","knowledge_fallback":null`, "", "knowledge_fallback"},
+		{"duplicate null", `"knowledge":"notes","knowledge_fallback":"model","knowledge_fallback":null`, "", "knowledge_fallback"},
+		{"case variant null", `"knowledge":"notes","knowledge_fallback":"model","Knowledge_Fallback":null`, "", "knowledge_fallback"},
+		{"case variant empty", `"knowledge":"notes","KNOWLEDGE_FALLBACK":"","knowledge_fallback":"model"`, "", "knowledge_fallback"},
+		{"boolean", `"knowledge":"notes","knowledge_fallback":true`, "", "knowledge_fallback"},
+		{"missing knowledge", `"knowledge_fallback":"model"`, "", "requires knowledge"},
+		{"disabled without knowledge", `"knowledge_fallback":"none"`, "", "requires knowledge"},
+		{"unknown knowledge", `"knowledge":"missing","knowledge_fallback":"model"`, "", "unknown knowledge base"},
+		{"vision", `"knowledge":"notes","knowledge_fallback":"model","capabilities":["chat","vision"]`, "", "text chat only"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `{"providers":{"local":{"type":"codex"}},"knowledge_bases":{"notes":{"root":"notes"}},"models":{"infra":{"provider":"local",` + tc.fields + `}}}`
+			c, err := loadKnowledgeConfig(t, body)
+			if tc.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+					t.Fatalf("want error containing %q, got %v", tc.wantError, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := c.Models["infra"].KnowledgeFallback; got != tc.want {
+				t.Fatalf("fallback = %q, want %q", got, tc.want)
+			}
+			encoded, err := json.Marshal(c)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reloaded, err := loadKnowledgeConfig(t, string(encoded))
+			if err != nil || reloaded.Models["infra"].KnowledgeFallback != tc.want {
+				t.Fatalf("fallback failed config round trip: %v", err)
+			}
+		})
+	}
+	for _, model := range []Model{
+		{Provider: "codex", Knowledge: "notes", KnowledgeFallback: "invalid"},
+		{Provider: "codex", KnowledgeFallback: "model"},
+	} {
+		c := Default()
+		base := DefaultKnowledgeBase()
+		base.Root = "notes"
+		c.KnowledgeBases = map[string]KnowledgeBase{"notes": base}
+		c.Models = map[string]Model{"infra": model}
+		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "knowledge_fallback") {
+			t.Fatalf("programmatic invalid fallback accepted: %v", err)
+		}
+	}
+}

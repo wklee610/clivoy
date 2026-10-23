@@ -40,14 +40,15 @@ func (p Provider) CLICapabilities() []string {
 }
 
 type Model struct {
-	Provider     string   `json:"provider"`
-	Model        string   `json:"model,omitempty"`
-	Knowledge    string   `json:"knowledge,omitempty"`
-	Capabilities []string `json:"capabilities,omitempty"`
+	Provider          string   `json:"provider"`
+	Model             string   `json:"model,omitempty"`
+	Knowledge         string   `json:"knowledge,omitempty"`
+	KnowledgeFallback string   `json:"knowledge_fallback,omitempty"`
+	Capabilities      []string `json:"capabilities,omitempty"`
 }
 
-// UnmarshalJSON keeps an explicitly empty or null capabilities value distinct
-// from an omitted value, while preserving strict configuration decoding.
+// UnmarshalJSON distinguishes omitted defaults from explicitly empty or null
+// capabilities and fallback settings, preserving strict configuration decoding.
 func (m *Model) UnmarshalJSON(data []byte) error {
 	type model Model
 	var decoded model
@@ -60,9 +61,15 @@ func (m *Model) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	for field := range fields {
+	for field, value := range fields {
 		if strings.EqualFold(field, "capabilities") && decoded.Capabilities == nil {
 			decoded.Capabilities = []string{}
+		}
+		if strings.EqualFold(field, "knowledge_fallback") {
+			raw := bytes.TrimSpace(value)
+			if bytes.Equal(raw, []byte("null")) || bytes.Equal(raw, []byte(`""`)) || decoded.KnowledgeFallback == "" {
+				return fmt.Errorf("knowledge_fallback must be 'none' or 'model' when specified")
+			}
 		}
 	}
 	*m = Model(decoded)
@@ -248,13 +255,8 @@ func (c Config) Validate() error {
 		if !ok {
 			return fmt.Errorf("model %q references an unknown provider", name)
 		}
-		if m.Knowledge != "" {
-			if _, ok := c.KnowledgeBases[m.Knowledge]; !ok {
-				return fmt.Errorf("model %q references an unknown knowledge base", name)
-			}
-			if m.Capabilities != nil && (len(m.Capabilities) != 1 || m.Capabilities[0] != "chat") {
-				return fmt.Errorf("model %q: knowledge models support text chat only", name)
-			}
+		if err := m.validateKnowledge(c.KnowledgeBases); err != nil {
+			return fmt.Errorf("model %q: %w", name, err)
 		}
 		if (p.Type == "openai" || p.Type == "ollama") && strings.TrimSpace(m.Model) == "" {
 			return fmt.Errorf("model %q requires an upstream model", name)

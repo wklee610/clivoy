@@ -18,17 +18,37 @@ type provider struct {
 	index            *knowledge.Index
 	topK             int
 	maxContextTokens int
+	fallback         string
+}
+
+// Options controls how a knowledge model answers when retrieval finds no documents.
+type Options struct {
+	// Fallback is empty or "none" for the deterministic no-document response,
+	// or "model" to answer with general knowledge using the same backend.
+	Fallback string
 }
 
 // New wraps a backend with retrieval from an already refreshed document index.
-func New(backend engine.Provider, index *knowledge.Index, topK, maxContextTokens int) (engine.Provider, error) {
+// At most one Options value may be supplied; omitting it preserves the no-model
+// response when no documents match.
+func New(backend engine.Provider, index *knowledge.Index, topK, maxContextTokens int, options ...Options) (engine.Provider, error) {
 	if backend == nil || index == nil {
 		return nil, errors.New("RAG requires a backend and document index")
 	}
 	if topK <= 0 || maxContextTokens <= 0 {
 		return nil, errors.New("RAG top_k and max_context_tokens must be positive")
 	}
-	return &provider{backend: backend, index: index, topK: topK, maxContextTokens: maxContextTokens}, nil
+	if len(options) > 1 {
+		return nil, errors.New("RAG accepts at most one options value")
+	}
+	var fallback string
+	if len(options) == 1 {
+		fallback = options[0].Fallback
+	}
+	if fallback != "" && fallback != "none" && fallback != "model" {
+		return nil, errors.New("RAG knowledge_fallback must be none or model")
+	}
+	return &provider{backend: backend, index: index, topK: topK, maxContextTokens: maxContextTokens, fallback: fallback}, nil
 }
 
 func (p *provider) Validate(req engine.Request) error {
@@ -96,7 +116,13 @@ func (p *provider) Prepare(ctx context.Context, req engine.Request) (engine.Prov
 	prepared := &preparedProvider{backend: p.backend}
 	copyReq := copyMessages(req)
 	if len(hits) == 0 {
-		prepared.noMatch = noDocumentAnswer(latest)
+		if p.fallback == "model" {
+			content, _ := json.Marshal(fallbackGuidance)
+			copyReq.Messages = append([]engine.Message{{Role: "system", Content: content}}, copyReq.Messages...)
+			prepared.prefix = fallbackNotice(latest) + "\n\n"
+		} else {
+			prepared.noMatch = noDocumentAnswer(latest)
+		}
 		return prepared, copyReq, nil
 	}
 	prompt, sources := buildContext(hits, p.maxContextTokens)
@@ -119,6 +145,7 @@ func (p *provider) Generate(ctx context.Context, req engine.Request, emit func(e
 
 type preparedProvider struct {
 	backend engine.Provider
+	prefix  string
 	footer  string
 	noMatch string
 }
@@ -129,44 +156,38 @@ func (p *preparedProvider) Generate(ctx context.Context, req engine.Request, emi
 	if err := ctx.Err(); err != nil {
 		return engine.Result{}, err
 	}
+	output := textOutput{ctx: ctx, emit: emit, prefix: p.prefix}
 	if p.noMatch != "" {
-		if emit != nil {
-			if err := emit(engine.Delta{Text: p.noMatch}); err != nil {
-				return engine.Result{}, err
-			}
-		}
-		if err := ctx.Err(); err != nil {
+		if err := output.write(p.noMatch); err != nil {
 			return engine.Result{}, err
 		}
 		return engine.Result{Text: p.noMatch, FinishReason: "stop"}, nil
 	}
 	var streamed strings.Builder
-	var emitErr error
 	var wrappedEmit func(engine.Delta) error
 	if emit != nil {
 		wrappedEmit = func(delta engine.Delta) error {
-			if emitErr != nil {
-				return emitErr
+			if output.err != nil {
+				return output.err
 			}
 			if ctx.Err() != nil {
-				emitErr = ctx.Err()
+				output.err = ctx.Err()
 			} else if len(delta.ToolCalls) != 0 {
-				emitErr = invalidBackend("RAG backend returned unsupported tool calls")
+				output.err = invalidBackend("RAG backend returned unsupported tool calls")
 			} else if delta.Text != "" {
-				emitErr = emit(delta)
-				if emitErr == nil {
+				if output.write(delta.Text) == nil {
 					streamed.WriteString(delta.Text)
 				}
 			}
-			return emitErr
+			return output.err
 		}
 	}
 	result, err := p.backend.Generate(ctx, req, wrappedEmit)
 	if ctx.Err() != nil {
 		return engine.Result{}, ctx.Err()
 	}
-	if emitErr != nil {
-		return engine.Result{}, emitErr
+	if output.err != nil {
+		return engine.Result{}, output.err
 	}
 	if err != nil {
 		return engine.Result{}, err
@@ -174,27 +195,59 @@ func (p *preparedProvider) Generate(ctx context.Context, req engine.Request, emi
 	if len(result.ToolCalls) != 0 || result.FinishReason == "tool_calls" {
 		return engine.Result{}, invalidBackend("RAG backend returned unsupported tool calls")
 	}
+	suffix := result.Text
 	if emit != nil {
 		if !strings.HasPrefix(result.Text, streamed.String()) {
 			return engine.Result{}, invalidBackend("RAG backend final output did not match the streamed response")
 		}
-		if suffix := result.Text[streamed.Len():]; suffix != "" {
-			if err := emit(engine.Delta{Text: suffix}); err != nil {
-				return engine.Result{}, err
-			}
-		}
-		if err := ctx.Err(); err != nil {
-			return engine.Result{}, err
-		}
-		if err := emit(engine.Delta{Text: p.footer}); err != nil {
-			return engine.Result{}, err
-		}
+		suffix = result.Text[streamed.Len():]
 	}
-	if err := ctx.Err(); err != nil {
+	if err := output.write(suffix); err != nil {
 		return engine.Result{}, err
 	}
-	result.Text += p.footer
+	if err := output.write(p.footer); err != nil {
+		return engine.Result{}, err
+	}
+	result.Text = p.prefix + result.Text + p.footer
 	return result, nil
+}
+
+// textOutput adds the prefix only when text is available or generation has
+// completed successfully. Backend text is tracked separately for consistency
+// checks, so the prefix cannot be mistaken for an upstream delta or repeated.
+type textOutput struct {
+	ctx     context.Context
+	emit    func(engine.Delta) error
+	prefix  string
+	started bool
+	err     error
+}
+
+func (o *textOutput) write(text string) error {
+	if o.err != nil {
+		return o.err
+	}
+	if o.err = o.ctx.Err(); o.err != nil || o.emit == nil {
+		return o.err
+	}
+	if !o.started {
+		o.started = true
+		if o.prefix != "" {
+			if o.err = o.emit(engine.Delta{Text: o.prefix}); o.err != nil {
+				return o.err
+			}
+			if o.err = o.ctx.Err(); o.err != nil {
+				return o.err
+			}
+		}
+	}
+	if text != "" {
+		if o.err = o.emit(engine.Delta{Text: text}); o.err != nil {
+			return o.err
+		}
+	}
+	o.err = o.ctx.Err()
+	return o.err
 }
 
 func unavailable(message string) error {
@@ -280,5 +333,20 @@ func noDocumentAnswer(query string) string {
 		return "未找到相关文档。请更具体地描述问题，或向知识目录添加相关文档。"
 	default:
 		return "No relevant documents were found. Please make the question more specific or add relevant documents to the knowledge directory."
+	}
+}
+
+const fallbackGuidance = "No relevant documents were found in the knowledge base. Answer the latest user message in its language using general knowledge only. Do not invent private organizational facts, internal policies, or document sources. If an answer requires private facts, explain that you cannot verify them without supporting documents. Do not cite the knowledge base or invent citations. Never execute commands or call tools. The application prepends a notice explaining this fallback; do not repeat that notice or add a Sources list."
+
+func fallbackNotice(query string) string {
+	switch language(query) {
+	case "ko":
+		return "지식 베이스에서 관련 문서를 찾지 못해 일반 지식으로 답변합니다."
+	case "ja":
+		return "ナレッジベースに関連する文書が見つからなかったため、一般的な知識に基づいて回答します。"
+	case "zh":
+		return "知识库中未找到相关文档，将基于通用知识回答。"
+	default:
+		return "No relevant documents were found in the knowledge base, so I will answer using general knowledge."
 	}
 }

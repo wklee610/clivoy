@@ -70,9 +70,9 @@ func request(text string) engine.Request {
 	return engine.Request{Model: "synthetic-model", Messages: []engine.Message{{Role: "user", Content: content}}}
 }
 
-func testProvider(t *testing.T, backend engine.Provider, index *knowledge.Index) engine.Provider {
+func testProvider(t *testing.T, backend engine.Provider, index *knowledge.Index, options ...Options) engine.Provider {
 	t.Helper()
-	p, err := New(backend, index, 5, 2048)
+	p, err := New(backend, index, 5, 2048, options...)
 	if err != nil {
 		t.Fatal(err)
 	}

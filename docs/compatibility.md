@@ -82,15 +82,25 @@ native `<provider>/<model>` requests keep their existing behavior. RAG accepts
 text only; images, API tool calling, tool history and structured JSON output are
 unsupported, including when the underlying HTTP provider supports them.
 
-Sources are appended to answer text as a numbered list. They identify documents
-included in the model context, not verified claim-by-claim citations. There is no
+For retrieved answers, sources are appended to answer text as a numbered list.
+They identify documents included in the model context, not verified claim-by-claim
+citations. There is no
 additional `sources` field or vendor-native citation annotation. The server emits
 the same footer in streaming and non-streaming answers; upstream usage excludes
-that footer. If retrieval finds nothing relevant, Clivoy returns a no-match
-answer without invoking a generation backend.
+that footer. By default, if retrieval finds nothing relevant, Clivoy returns a
+no-match answer without invoking a generation backend.
+
+Since v1.2.0, an alias can set `knowledge_fallback: "model"` to send the original
+question and history to that alias's backend when a successful search returns
+zero matches. This applies to all three conversation endpoints in JSON and SSE
+modes. Clivoy prepends a localized general-knowledge notice and omits the source
+footer; upstream usage excludes the notice. The default is `"none"`, and the
+same text-only validation and CLI execution restrictions apply. Search errors,
+cancellation and insufficient context budget do not trigger fallback.
 
 `POST /v1/search` and `GET /v1/knowledge/status` are Clivoy-specific authenticated
-extensions, not OpenAI or Anthropic endpoints. See [knowledge setup](knowledge.md)
+extensions, not OpenAI or Anthropic endpoints. Search never invokes a model,
+including when a RAG alias has fallback enabled. See [knowledge setup](knowledge.md)
 for their request formats, refresh behavior, token estimates and execution
 controls. Existing configurations are not automatically given knowledge bases.
 

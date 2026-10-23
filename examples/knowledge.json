@@ -19,6 +19,7 @@
   },
   "models": {
     "codex": {"provider": "codex", "capabilities": ["chat", "vision"]},
-    "infra": {"provider": "codex", "knowledge": "default", "capabilities": ["chat"]}
+    "infra": {"provider": "codex", "knowledge": "default", "knowledge_fallback": "none", "capabilities": ["chat"]},
+    "infra-general": {"provider": "codex", "knowledge": "default", "knowledge_fallback": "model", "capabilities": ["chat"]}
   }
 }
