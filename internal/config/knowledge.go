@@ -19,6 +19,29 @@ type KnowledgeBase struct {
 	RefreshInterval  string `json:"refresh_interval"`
 }
 
+// validateKnowledge keeps retrieval references and model-scoped answer policy
+// together. The zero value preserves the pre-fallback behavior.
+func (m Model) validateKnowledge(bases map[string]KnowledgeBase) error {
+	switch m.KnowledgeFallback {
+	case "", "none", "model":
+	default:
+		return fmt.Errorf("knowledge_fallback must be 'none' or 'model'")
+	}
+	if m.Knowledge == "" {
+		if m.KnowledgeFallback != "" {
+			return fmt.Errorf("knowledge_fallback requires knowledge")
+		}
+		return nil
+	}
+	if _, ok := bases[m.Knowledge]; !ok {
+		return fmt.Errorf("references an unknown knowledge base")
+	}
+	if m.Capabilities != nil && (len(m.Capabilities) != 1 || m.Capabilities[0] != "chat") {
+		return fmt.Errorf("knowledge models support text chat only")
+	}
+	return nil
+}
+
 // DefaultKnowledgeBase supplies retrieval defaults without selecting a directory.
 func DefaultKnowledgeBase() KnowledgeBase {
 	return KnowledgeBase{TopK: 10, MaxContextTokens: 6000, RefreshInterval: "30s"}

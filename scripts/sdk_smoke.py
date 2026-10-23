@@ -32,6 +32,7 @@ MODEL = "test-model"
 VISION_MODEL = "vision-model"
 IMAGE_MODEL = "image-model"
 KNOWLEDGE_MODEL = "knowledge-model"
+FALLBACK_MODEL = "fallback-model"
 KNOWLEDGE_QUERY = "What is the backup procedure?"
 KNOWLEDGE_USER = {"role": "user", "content": KNOWLEDGE_QUERY}
 KNOWLEDGE_TITLE = "Backup handbook"
@@ -205,11 +206,12 @@ class SDKCompatibility(unittest.TestCase):
     def test_models(self):
         models = self.oai.models.list()
         self.assertEqual([(m.id, m.owned_by) for m in models.data],
-                         [(IMAGE_MODEL, "test"), (KNOWLEDGE_MODEL, "test"),
+                         [(FALLBACK_MODEL, "test"), (IMAGE_MODEL, "test"), (KNOWLEDGE_MODEL, "test"),
                           (MODEL, "test"), (VISION_MODEL, "test")])
         self.assertEqual({m.id: m.model_dump()["capabilities"] for m in models.data}, {
             MODEL: ["chat"], VISION_MODEL: ["chat", "vision"], IMAGE_MODEL: ["image_generation"],
             KNOWLEDGE_MODEL: ["chat"],
+            FALLBACK_MODEL: ["chat"],
         })
 
     def test_chat(self):
@@ -297,6 +299,44 @@ class SDKCompatibility(unittest.TestCase):
         self.assertIn("No relevant documents", result.choices[0].message.content)
         self.assertNotIn("Sources:", result.choices[0].message.content)
         self.assertEqual(len(self.upstream.requests), before)
+
+    def test_knowledge_fallback_across_sdks(self):
+        question = "은하항해xyz 설명해줘"
+        user = {"role": "user", "content": question}
+        notice = "지식 베이스에서 관련 문서를 찾지 못해 일반 지식으로 답변합니다."
+        for protocol in ("chat", "responses", "anthropic"):
+            for streaming in (False, True):
+                with self.subTest(protocol=protocol, streaming=streaming):
+                    before = len(self.upstream.requests)
+                    if protocol == "chat":
+                        result = self.oai.chat.completions.create(
+                            model=FALLBACK_MODEL, messages=[user], stream=streaming,
+                        )
+                        if streaming:
+                            with result as stream:
+                                text = "".join(c.choices[0].delta.content or "" for c in stream if c.choices)
+                        else:
+                            text = result.choices[0].message.content
+                    elif protocol == "responses":
+                        if streaming:
+                            with self.oai.responses.stream(model=FALLBACK_MODEL, input=question, store=False) as stream:
+                                text = "".join(e.delta for e in stream if e.type == "response.output_text.delta")
+                                self.assertEqual(text, stream.get_final_response().output_text)
+                        else:
+                            text = self.oai.responses.create(model=FALLBACK_MODEL, input=question, store=False).output_text
+                    elif streaming:
+                        with self.claude.messages.stream(model=FALLBACK_MODEL, max_tokens=128, messages=[user]) as stream:
+                            text = "".join(stream.text_stream)
+                            self.assertEqual(text, stream.get_final_message().content[0].text)
+                    else:
+                        text = self.claude.messages.create(model=FALLBACK_MODEL, max_tokens=128, messages=[user]).content[0].text
+                    self.assertEqual(text, notice + "\n\n" + TEXT)
+                    self.assertEqual(len(self.upstream.requests), before + 1)
+                    payload = self.upstream.requests[-1]
+                    self.assertEqual(payload["model"], "upstream-model")
+                    self.assertEqual(payload["messages"][-1], user)
+                    self.assertNotIn(KNOWLEDGE_URL, json.dumps(payload))
+                    self.assertNotIn("tools", payload)
 
     def test_knowledge_search_and_status(self):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -795,6 +835,8 @@ def main():
                     IMAGE_MODEL: {"provider": "test", "model": "upstream-image", "capabilities": ["image_generation"]},
                     KNOWLEDGE_MODEL: {"provider": "test", "model": "upstream-model",
                                       "knowledge": "default", "capabilities": ["chat"]},
+                    FALLBACK_MODEL: {"provider": "test", "model": "upstream-model",
+                                     "knowledge": "default", "knowledge_fallback": "model", "capabilities": ["chat"]},
                 },
             }
             path = directory / "config.json"

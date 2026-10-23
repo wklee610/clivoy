@@ -124,7 +124,7 @@ func buildKnowledgeModels(c config.Config, choices map[string]config.Model, back
 				}
 			}
 			var err error
-			backend, err = rag.New(backend, base.Index, base.TopK, base.MaxContextTokens)
+			backend, err = rag.New(backend, base.Index, base.TopK, base.MaxContextTokens, rag.Options{Fallback: model.KnowledgeFallback})
 			if err != nil {
 				return nil, fmt.Errorf("knowledge model %q: %w", alias, err)
 			}
